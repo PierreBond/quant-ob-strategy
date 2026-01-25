@@ -326,6 +326,91 @@ def run_live(paper: bool = True, symbol: str = "BTC/USDT"):
     print("  - Running bot with: python main.py --mode live")
 
 
+def print_last_orderblocks(symbol: str = "BTC/USDT",
+                           days: int = 7,
+                           timeframe: str = "1h",
+                           exchange: str = "binance"):
+    """Print the last order blocks on a given timeframe"""
+    print(f"\n{'='*60}")
+    print(f"FETCHING LAST ORDER BLOCKS")
+    print(f"{'='*60}")
+    print(f"Symbol:     {symbol}")
+    print(f"Timeframe:  {timeframe}")
+    print(f"Exchange:   {exchange}")
+    print(f"{'='*60}\n")
+
+    # Fetch real data
+    print("Loading data...")
+    df = fetch_real_data(symbol=symbol, days=days, timeframe=timeframe, exchange_id=exchange)
+    
+    if df is None or df.empty:
+        print("❌ Failed to fetch data")
+        return
+
+    # Initialize strategy
+    strategy = OrderBlockStrategy(
+        input_range=25,
+        min_risk_reward=1.5,
+        sl_atr_mult=2.0,
+        tp_rr_mult=2.0,
+        first_retest_only=False
+    )
+    
+    # Initialize strategy with data
+    strategy.on_init(df)
+    
+    # Run through data to detect OBs (suppress OB printing during scan)
+    print("🔍 Scanning for order blocks...\n")
+    strategy._last_printed_ob_long = -1  # Suppress printing during scan
+    strategy._last_printed_ob_short = -1
+    
+    for idx in range(strategy.input_range + 10, len(df)):
+        current = df.iloc[idx]
+        current_idx = idx
+        
+        # Update state step by step
+        strategy._update_structure(df, current_idx)
+        strategy._detect_bearish_bos(df, current, current_idx)
+        strategy._detect_bullish_bos(df, current, current_idx)
+        strategy._update_ob_status(df, current, current_idx)
+    
+    # Get last OBs
+    last_obs = strategy.get_last_ob_info()
+    current_price = df['close'].iloc[-1]
+    
+    print(f"\n{'='*60}")
+    print(f"LATEST ORDER BLOCKS - {symbol} ({timeframe})")
+    print(f"{'='*60}")
+    print(f"Current Price: ${current_price:,.2f}")
+    print(f"Last Update:   {df.index[-1]}\n")
+    
+    if last_obs['bullish']:
+        ob = last_obs['bullish']
+        print(f"🟢 BULLISH ORDER BLOCK")
+        print(f"   Top:       ${ob['top']:,.2f}")
+        print(f"   Bottom:    ${ob['bottom']:,.2f}")
+        print(f"   Range:     ${ob['range']:,.2f} ({ob['range']/ob['bottom']*100:.2f}%)")
+        print(f"   State:     {ob['state']}")
+        print(f"   Created:   {ob['created_at']}")
+        print(f"   Timestamp: {ob['timestamp']}\n")
+    else:
+        print("🟢 No bullish order block detected\n")
+    
+    if last_obs['bearish']:
+        ob = last_obs['bearish']
+        print(f"🔴 BEARISH ORDER BLOCK")
+        print(f"   Top:       ${ob['top']:,.2f}")
+        print(f"   Bottom:    ${ob['bottom']:,.2f}")
+        print(f"   Range:     ${ob['range']:,.2f} ({ob['range']/ob['bottom']*100:.2f}%)")
+        print(f"   State:     {ob['state']}")
+        print(f"   Created:   {ob['created_at']}")
+        print(f"   Timestamp: {ob['timestamp']}\n")
+    else:
+        print("🔴 No bearish order block detected\n")
+    
+    print(f"{'='*60}\n")
+
+
 def optimize_strategy(symbol: str = "BTC/USDT", days: int = 60):
     """Optimize strategy parameters"""
 
@@ -376,7 +461,7 @@ def optimize_strategy(symbol: str = "BTC/USDT", days: int = 60):
 
 def main():
     parser = argparse.ArgumentParser(description='Trading Bot')
-    parser.add_argument('--mode', choices=['backtest', 'live', 'optimize'],
+    parser.add_argument('--mode', choices=['backtest', 'live', 'optimize', 'last_ob'],
                         default='backtest', help='Running mode')
     parser.add_argument('--symbol', type=str, default='BTC/USDT',
                         help='Trading symbol (e.g., BTC/USDT, ETH/USDT)')
@@ -416,6 +501,13 @@ def main():
         run_live(paper=not args.live, symbol=args.symbol)
     elif args.mode == 'optimize':
         optimize_strategy(symbol=args.symbol, days=args.days)
+    elif args.mode == 'last_ob':
+        print_last_orderblocks(
+            symbol=args.symbol,
+            days=args.days,
+            timeframe=args.timeframe,
+            exchange=args.exchange
+        )
 
 
 if __name__ == "__main__":

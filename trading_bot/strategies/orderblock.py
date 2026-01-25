@@ -58,6 +58,7 @@ class OrderBlock:
     ob_type: str  # 'bullish' or 'bearish'
     state: int = OBState.ACTIVE.value  # 0=active, 1=mitigated
     bos_confirmed: bool = False  # Break of structure confirmed
+    created_at: Optional[datetime] = None  # When OB was created
 
     @property
     def range(self) -> float:
@@ -214,6 +215,10 @@ class OrderBlockStrategy(Strategy):
         self.bearish_alert = False
         self.long_retest = False
         self.short_retest = False
+        
+        # Track last printed OB to avoid duplicates
+        self._last_printed_ob_long = None
+        self._last_printed_ob_short = None
 
     def on_bar(self, df: pd.DataFrame, position: PositionSide = None) -> Dict:
         """Generate trading signal for current bar"""
@@ -290,11 +295,15 @@ class OrderBlockStrategy(Strategy):
                     low=self.last_up_low,
                     close=df.iloc[self.last_up_index]['close'],
                     open=df.iloc[self.last_up_index]['open'],
-                    ob_type='bearish'
+                    ob_type='bearish',
+                    created_at=current.name if hasattr(current, 'name') else df.index[current_idx]
                 )
                 self.short_obs.append(ob)
                 self.last_short_index = self.last_up_index
                 self.bearish_alert = True
+                
+                # Print OB info
+                self._print_ob_info(ob, current['close'], df)
 
     def _detect_bullish_bos(self, df: pd.DataFrame, current, current_idx: int):
         """Detect bullish break of structure - mitigates Bearish OB, creates Bullish OB"""
@@ -319,13 +328,77 @@ class OrderBlockStrategy(Strategy):
                     low=self.last_down_low,
                     close=df.iloc[self.last_down_index]['close'],
                     open=df.iloc[self.last_down_index]['open'],
-                    ob_type='bullish'
+                    ob_type='bullish',
+                    created_at=current.name if hasattr(current, 'name') else df.index[current_idx]
                 )
                 self.long_obs.append(ob)
                 self.last_long_index = current_idx
 
+                # Print OB info
+                self._print_ob_info(ob, current['close'], df)
+
                 # Remove mitigated short OB
                 self.short_obs.pop()
+
+    def _print_ob_info(self, ob: OrderBlock, current_price: float, df: pd.DataFrame):
+        """Print order block information"""
+        ob_id = id(ob)
+        
+        # Check if we already printed this OB
+        if ob.ob_type == 'bullish':
+            if self._last_printed_ob_long == ob_id:
+                return
+            self._last_printed_ob_long = ob_id
+        else:
+            if self._last_printed_ob_short == ob_id:
+                return
+            self._last_printed_ob_short = ob_id
+        
+        emoji = "🟢" if ob.ob_type == "bullish" else "🔴"
+        ob_range = ob.top - ob.bottom
+        distance_pct = ((current_price - ob.bottom) / ob.bottom * 100) if ob.ob_type == "bullish" else ((ob.top - current_price) / current_price * 100)
+        
+        print(f"\n{emoji} {'='*60}")
+        print(f"NEW {ob.ob_type.upper()} ORDER BLOCK DETECTED")
+        print(f"{'='*60}")
+        print(f"📍 Price Range:  ${ob.bottom:,.2f} - ${ob.top:,.2f}")
+        print(f"📏 OB Width:     ${ob_range:,.2f} ({ob_range/ob.bottom*100:.2f}%)")
+        print(f"💰 Current Price: ${current_price:,.2f}")
+        print(f"📊 Distance:     {distance_pct:.2f}% {'above' if ob.ob_type == 'bullish' else 'below'} OB")
+        print(f"🕐 Created:      {ob.created_at}")
+        print(f"📈 State:        {OBState(ob.state).name}")
+        print(f"{'='*60}\n")
+    
+    def get_last_ob_info(self) -> Dict[str, Any]:
+        """Get information about the last order blocks"""
+        result = {
+            'bullish': None,
+            'bearish': None
+        }
+        
+        if self.long_obs:
+            ob = self.long_obs[-1]
+            result['bullish'] = {
+                'top': ob.top,
+                'bottom': ob.bottom,
+                'range': ob.top - ob.bottom,
+                'created_at': ob.created_at,
+                'state': OBState(ob.state).name,
+                'timestamp': ob.timestamp
+            }
+        
+        if self.short_obs:
+            ob = self.short_obs[-1]
+            result['bearish'] = {
+                'top': ob.top,
+                'bottom': ob.bottom,
+                'range': ob.top - ob.bottom,
+                'created_at': ob.created_at,
+                'state': OBState(ob.state).name,
+                'timestamp': ob.timestamp
+            }
+        
+        return result
 
     def _update_ob_status(self, df: pd.DataFrame, current, current_idx: int):
         """Update OB status (mitigation checks)"""
