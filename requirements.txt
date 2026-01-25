@@ -1,0 +1,32 @@
+# Trading Bot Dependencies
+# =========================
+
+# Core
+pandas>=2.0.0
+numpy>=1.24.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Exchange connectivity
+ccxt>=4.0.0
+
+# Async support
+aiohttp>=3.8.0
+asyncio>=3.4.0
+
+# Data handling
+pyarrow>=12.0.0  # For parquet files
+
+# Utilities
+python-dateutil>=2.8.0
+pytz>=2023.3
+
+# Telegram notifications
+python-telegram-bot>=20.0
+
+# Optional: Email notifications (built-in smtplib)
+
+# Development/Testing
+pytest>=7.0.0
+black>=23.0.0
+flake8>=6.0.0
