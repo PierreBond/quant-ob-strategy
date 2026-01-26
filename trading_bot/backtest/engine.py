@@ -17,6 +17,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
+try:
+    from trading_bot.utils.trade_journal import TradeJournalSync
+except ImportError:
+    TradeJournalSync = None
+
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -186,11 +191,13 @@ class BacktestEngine:
                  initial_capital: float = 10000.0,
                  fee_percent: float = 0.001,  # 0.1% fee
                  slippage_percent: float = 0.0005,  # 0.05% slippage
-                 max_position_size: float = 1.0):  # 100% of capital
+                 max_position_size: float = 1.0,  # 100% of capital
+                 enable_journal: bool = True):  # Enable trade journaling
         self.initial_capital = initial_capital
         self.fee_percent = fee_percent
         self.slippage_percent = slippage_percent
         self.max_position_size = max_position_size
+        self.enable_journal = enable_journal
 
         self.capital = initial_capital
         self.position: PositionSide = PositionSide.FLAT
@@ -198,6 +205,7 @@ class BacktestEngine:
         self.entry_price = 0.0
         self.entry_time = None
         self.entry_bar_idx = 0  # Track bar index for duration calculation
+        self.journal = None  # Trade journal instance
         self.entry_order = None
 
         self.trades: List[Trade] = []
@@ -220,6 +228,17 @@ class BacktestEngine:
         Returns:
             BacktestResult with performance metrics
         """
+        # Initialize trade journal
+        if self.enable_journal and TradeJournalSync:
+            try:
+                self.journal = TradeJournalSync()
+                self.journal.initialize()
+                self.current_symbol = getattr(df, 'symbol', 'BTC/USDT')
+                logger.info("✓ Trade journal enabled")
+            except Exception as e:
+                logger.warning(f"Trade journal initialization failed: {e}")
+                self.journal = None
+        
         # Initialize
         self.capital = self.initial_capital
         self.position = PositionSide.FLAT
@@ -274,6 +293,23 @@ class BacktestEngine:
 
         if verbose:
             self._print_results(result)
+        
+        # Send session summary to journal
+        if self.journal:
+            try:
+                self.journal.send_session_summary(
+                    total_trades=result.total_trades,
+                    win_rate=result.win_rate,
+                    total_pnl=result.total_pnl,
+                    total_return=result.total_pnl_percent,
+                    initial_capital=self.initial_capital,
+                    final_capital=self.capital,
+                    max_drawdown=result.max_drawdown,
+                    profit_factor=result.profit_factor
+                )
+                self.journal.shutdown()
+            except Exception as e:
+                logger.error(f"Failed to send journal summary: {e}")
 
         return result
 
@@ -336,6 +372,23 @@ class BacktestEngine:
         self.entry_time = order.filled_time
         self.entry_bar_idx = self.current_bar_idx  # Store bar index for duration
         self.entry_order = order
+        
+        # Log trade entry to journal
+        if self.journal:
+            try:
+                symbol = getattr(self, 'current_symbol', 'BTC/USDT')
+                self.journal.log_trade_entry(
+                    signal_type=order.side.value,
+                    symbol=symbol,
+                    price=order.filled_price,
+                    sl=order.stop_loss if order.stop_loss else 0,
+                    tp=order.take_profit if order.take_profit else 0,
+                    quantity=order.quantity,
+                    capital=self.capital + fee,  # Capital before fee
+                    entry_reason="signal"
+                )
+            except Exception as e:
+                logger.error(f"Failed to log trade entry: {e}")
 
     def _close_position(self, row: pd.Series, reason: str):
         """Close current position"""
@@ -378,6 +431,27 @@ class BacktestEngine:
         )
 
         self.trades.append(trade)
+        
+        # Log trade exit to journal
+        if self.journal:
+            try:
+                symbol = getattr(self, 'current_symbol', 'BTC/USDT')
+                self.journal.log_trade_exit(
+                    signal_type=self.position.value,
+                    symbol=symbol,
+                    entry_price=self.entry_price,
+                    exit_price=exit_price,
+                    quantity=self.position_quantity,
+                    pnl=pnl,
+                    pnl_percent=pnl_percent,
+                    exit_reason=reason,
+                    duration_bars=trade.duration,
+                    capital=self.capital,
+                    sl=self.entry_order.stop_loss if self.entry_order else None,
+                    tp=self.entry_order.take_profit if self.entry_order else None
+                )
+            except Exception as e:
+                logger.error(f"Failed to log trade exit: {e}")
 
         # Reset position
         self.position = PositionSide.FLAT
@@ -493,7 +567,27 @@ class BacktestEngine:
 
         # Get data
         equity_df = pd.DataFrame(result.equity_curve)
-        trades_df = pd.DataFrame([t.to_dict() for t in result.trades])
+        trades_df = pd.DataFrame([t.to_dict() for t in result.trades]) if result.trades else pd.DataFrame()
+
+        # Handle empty equity curve
+        if equity_df.empty or 'equity' not in equity_df.columns:
+            ax1 = axes[0]
+            ax1.axhline(y=self.initial_capital, color='gray', linestyle='--', alpha=0.5)
+            ax1.set_title(f'No Trades - Initial Capital: ${self.initial_capital:,.2f}', fontsize=12)
+            ax1.set_ylabel('Equity ($)', fontsize=10)
+            ax1.grid(True, alpha=0.3)
+            
+            ax2 = axes[1]
+            ax2.set_title('Drawdown', fontsize=10)
+            ax2.set_ylabel('DD (%)', fontsize=10)
+            ax2.set_xlabel('Bar', fontsize=10)
+            ax2.grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            if save_path:
+                plt.savefig(save_path, dpi=150, bbox_inches='tight')
+                print(f"Chart saved to: {save_path}")
+            return fig
 
         # Price chart
         ax1 = axes[0]

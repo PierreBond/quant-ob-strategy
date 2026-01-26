@@ -27,6 +27,7 @@ python trading_bot/main.py --mode last_ob --timeframe 1h
 - [Installation](#installation)
 - [Available Modes](#available-modes)
 - [Strategies](#strategies)
+- [Telegram Trade Journal](#telegram-trade-journal)
 - [Command Reference](#command-reference)
 - [Usage Examples](#usage-examples)
 - [Data Sources](#data-sources)
@@ -137,7 +138,140 @@ python trading_bot/main.py --strategy sma
 
 ---
 
-## 📖 Command Reference
+## � Telegram Trade Journal
+
+Get **real-time trade notifications** sent directly to your Telegram! Every trade entry, exit, and session summary is logged with detailed information.
+
+### Quick Setup
+
+**1. Run the setup script:**
+```bash
+python setup_telegram.py
+```
+
+**2. Follow the interactive prompts to:**
+- Create a Telegram bot with @BotFather
+- Get your chat ID from @userinfobot
+- Configure notification preferences
+- Test the connection
+
+**3. Run backtests** - trades will automatically be sent to Telegram!
+
+📖 **[Full Setup Guide & Troubleshooting →](TELEGRAM_GUIDE.md)**
+
+### What Gets Sent
+
+**📈 Trade Entry Notifications:**
+```
+🟢 TRADE #1 - LONG ENTRY
+
+📈 Position Details
+Symbol: BTC/USDT
+Entry: $45,234.50
+Stop Loss: $44,100.00 (2.51%)
+Take Profit: $47,500.00 (5.01%)
+
+💰 Risk Management
+Quantity: 0.221
+Position Size: $10,000.00
+Risk: $250.60 (2.51%)
+Reward: $500.01
+R:R Ratio: 1:2.00
+
+💼 Account
+Capital: $10,000.00
+Reason: signal
+
+🕐 2026-01-26 14:23:15
+```
+
+**📊 Trade Exit Notifications:**
+```
+✅ TRADE #1 - WIN
+
+📊 Trade Summary
+Symbol: BTC/USDT
+Type: LONG
+Entry: $45,234.50
+Exit: $47,500.00
+Quantity: 0.221
+
+💵 Results
+PnL: +$500.01 (+5.01%)
+Exit Reason: TP
+Duration: 23 bars
+
+💼 Account
+Capital: $10,500.01
+
+🕐 2026-01-26 16:45:22
+```
+
+**🎉 Session Summary:**
+```
+🎉 TRADING SESSION SUMMARY
+
+📊 Performance
+Total Trades: 15
+Win Rate: 60.0%
+Total PnL: +$1,234.56
+Total Return: +12.35%
+
+💼 Capital
+Initial: $10,000.00
+Final: $11,234.56
+Max Drawdown: 3.45%
+Profit Factor: 2.15
+
+⏱️ Session
+Duration: 0:15:32
+Started: 2026-01-26 14:00:00
+Ended: 2026-01-26 14:15:32
+```
+
+### Manual Configuration
+
+Edit `trading_bot/config/telegram_config.json`:
+
+```json
+{
+  "bot_token": "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz",
+  "chat_id": "123456789",
+  "enabled": true,
+  "parse_mode": "HTML",
+  "notify_on_entry": true,
+  "notify_on_exit": true,
+  "notify_on_orderblock": false,
+  "send_summary": true,
+  "quiet_mode": false
+}
+```
+
+**Configuration Options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `bot_token` | Your Telegram bot token from @BotFather | Required |
+| `chat_id` | Your Telegram chat ID | Required |
+| `enabled` | Enable/disable Telegram notifications | `true` |
+| `notify_on_entry` | Send notification when entering trades | `true` |
+| `notify_on_exit` | Send notification when exiting trades | `true` |
+| `notify_on_orderblock` | Send notification when OBs detected | `false` |
+| `send_summary` | Send session summary at end | `true` |
+| `quiet_mode` | Silent notifications (no sound) | `false` |
+
+### Disable Telegram Journaling
+
+To run backtests without Telegram (console only):
+
+```bash
+# Set enabled to false in config
+# or trades will still print to console
+```
+
+---
+
+## �📖 Command Reference
 
 ### Global Options
 
@@ -443,3 +577,12 @@ python trading_bot/main.py --mode optimize --days 60
 
 **Last Updated:** January 25, 2026  
 **Version:** 1.0.0
+
+---
+
+## 📚 Additional Documentation
+
+- **[Telegram Setup Guide](TELEGRAM_GUIDE.md)** - Complete guide to trade journaling
+- **[Telegram Quick Reference](TELEGRAM_QUICKSTART.md)** - Quick commands and config
+- **[Trading Bot README](README.md)** - This file
+

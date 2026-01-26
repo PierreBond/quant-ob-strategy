@@ -1,0 +1,512 @@
+{
+  "total_trades": 1,
+  "win_rate": 0.0,
+  "winning_trades": 0,
+  "losing_trades": 1,
+  "total_pnl": -10.222569538962489,
+  "total_pnl_percent": -0.1022256953896239,
+  "avg_win": 0,
+  "avg_loss": -0.0045491184945728146,
+  "best_trade": -0.0045491184945728146,
+  "worst_trade": -0.0045491184945728146,
+  "profit_factor": 0.0,
+  "max_drawdown": 0.09973961829333347,
+  "avg_trade_duration": 5.0,
+  "trades": [
+    {
+      "entry_time": "2025-01-01T22:30:00",
+      "entry_price": 89897.26109865207,
+      "exit_time": "2025-01-01T23:45:00",
+      "exit_price": 89901.35063158283,
+      "side": "SHORT",
+      "quantity": 0.05559123758526758,
+      "pnl": -5.225069538963043,
+      "pnl_percent": -0.0045491184945728146,
+      "duration": 5,
+      "entry_reason": "signal",
+      "exit_reason": "end_of_data"
+    }
+  ],
+  "equity_curve": [
+    {
+      "timestamp": "2025-01-01 00:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 00:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 00:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 00:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 01:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 01:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 01:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 01:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 02:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 02:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 02:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 02:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 03:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 03:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 03:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 03:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 04:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 04:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 04:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 04:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 05:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 05:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 05:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 05:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 06:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 06:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 06:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 06:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 07:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 07:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 07:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 07:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 08:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 08:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 08:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 08:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 09:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 09:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 09:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 09:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 10:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 10:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 10:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 10:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 11:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 11:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 11:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 11:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 12:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 12:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 12:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 12:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 13:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 13:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 13:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 13:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 14:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 14:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 14:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 14:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 15:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 15:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 15:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 15:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 16:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 16:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 16:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 16:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 17:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 17:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 17:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 17:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 18:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 18:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 18:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 18:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 19:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 19:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 19:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 19:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 20:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 20:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 20:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 20:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 21:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 21:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 21:30:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 21:45:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 22:00:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 22:15:00",
+      "equity": 10000,
+      "position": "FLAT"
+    },
+    {
+      "timestamp": "2025-01-01 22:30:00",
+      "equity": 9992.5025,
+      "position": "SHORT"
+    },
+    {
+      "timestamp": "2025-01-01 22:45:00",
+      "equity": 9990.026038170667,
+      "position": "SHORT"
+    },
+    {
+      "timestamp": "2025-01-01 23:00:00",
+      "equity": 9995.696550549837,
+      "position": "SHORT"
+    },
+    {
+      "timestamp": "2025-01-01 23:15:00",
+      "equity": 9993.759859980997,
+      "position": "SHORT"
+    },
+    {
+      "timestamp": "2025-01-01 23:30:00",
+      "equity": 9991.316020757069,
+      "position": "SHORT"
+    },
+    {
+      "timestamp": "2025-01-01 23:45:00",
+      "equity": 9997.2727726669,
+      "position": "SHORT"
+    }
+  ]
+}

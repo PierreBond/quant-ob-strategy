@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 
 # Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from datetime import datetime, timedelta
@@ -52,13 +53,15 @@ except ImportError:
         pass
 
 try:
-    from strategies.orderblock import OrderBlockStrategy, OrderBlockStrategyAll, OrderBlockStrategyInverse, SimpleSMACrossover, RSIStrategy
+    from strategies.orderblock import OrderBlockStrategy, OrderBlockStrategyAll, OrderBlockStrategyInverse, OrderBlockStrategyPremium, SimpleSMACrossover, RSIStrategy
 except ImportError:
     class OrderBlockStrategy:
         pass
     class OrderBlockStrategyAll:
         pass
     class OrderBlockStrategyInverse:
+        pass
+    class OrderBlockStrategyPremium:
         pass
     class SimpleSMACrossover:
         pass
@@ -257,6 +260,23 @@ def run_backtest(symbol: str = "BTC/USDT",
             min_risk_reward=1.5,
             sl_atr_mult=2.0,
             tp_rr_mult=2.0,
+            first_retest_only=True,
+            position_size=0.5
+        )
+    elif strategy_name == "orderblock_premium":
+        strategy = OrderBlockStrategyPremium(
+            input_range=25,
+            min_risk_reward=2.0,      # Higher RR for premium setups
+            sl_atr_mult=1.0,          # Tighter SL (based on MSS swing)
+            tp_rr_mult=3.0,           # At least 3x risk
+            require_fvg=True,         # Must have Fair Value Gap
+            min_fvg_percent=0.1,      # Min 0.1% FVG
+            require_displacement=True, # Must have strong momentum
+            min_displacement_percent=0.5,  # Min 0.5% move
+            min_displacement_candles=2,    # Min 2 consecutive candles
+            require_ob_mss=False,     # Set True for only trend reversal OBs
+            mss_confirmation_bars=20, # Bars to wait for entry MSS confirmation
+            mss_swing_lookback=5,     # Bars to find swing for MSS
             first_retest_only=True,
             position_size=0.5
         )
@@ -468,8 +488,8 @@ def main():
     parser.add_argument('--days', type=int, default=60,
                         help='Days of data')
     parser.add_argument('--strategy', type=str, default='orderblock',
-                        choices=['orderblock', 'orderblock_all', 'orderblock_inverse', 'sma'],
-                        help='Strategy: orderblock, orderblock_all (mitigated), orderblock_inverse (contrarian), sma')
+                        choices=['orderblock', 'orderblock_all', 'orderblock_inverse', 'orderblock_premium', 'sma'],
+                        help='Strategy: orderblock, orderblock_all (mitigated), orderblock_inverse (contrarian), orderblock_premium (FVG+displacement), sma')
     parser.add_argument('--capital', type=float, default=10000,
                         help='Initial capital')
     parser.add_argument('--real-data', action='store_true',
