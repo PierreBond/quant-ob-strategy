@@ -495,7 +495,7 @@ def main():
     parser.add_argument('--real-data', action='store_true',
                         help='Use real exchange data instead of simulated')
     parser.add_argument('--exchange', type=str, default='binance',
-                        choices=['binance', 'bybit', 'okx', 'kucoin', 'coinbase'],
+                        choices=['binance', 'bybit', 'okx', 'kucoin', 'coinbase', 'kraken'],
                         help='Exchange for real data (default: binance)')
     parser.add_argument('--timeframe', type=str, default='15m',
                         choices=['1m', '5m', '15m', '30m', '1h', '4h', '1d'],
