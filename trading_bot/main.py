@@ -53,7 +53,7 @@ except ImportError:
         pass
 
 try:
-    from strategies.orderblock import OrderBlockStrategy, OrderBlockStrategyAll, OrderBlockStrategyInverse, OrderBlockStrategyPremium, SimpleSMACrossover, RSIStrategy
+    from strategies.orderblock import OrderBlockStrategy, OrderBlockStrategyAll, OrderBlockStrategyInverse, OrderBlockStrategyPremium, OrderBlockStrategyPremiumV2, OrderBlockStrategyPremiumV3, SimpleSMACrossover, RSIStrategy
 except ImportError:
     class OrderBlockStrategy:
         pass
@@ -62,6 +62,10 @@ except ImportError:
     class OrderBlockStrategyInverse:
         pass
     class OrderBlockStrategyPremium:
+        pass
+    class OrderBlockStrategyPremiumV2:
+        pass
+    class OrderBlockStrategyPremiumV3:
         pass
     class SimpleSMACrossover:
         pass
@@ -280,6 +284,69 @@ def run_backtest(symbol: str = "BTC/USDT",
             first_retest_only=True,
             position_size=0.5
         )
+    elif strategy_name == "orderblock_premium_v2":
+        strategy = OrderBlockStrategyPremiumV2(
+            input_range=25,
+            # Core Settings
+            min_risk_reward=1.5,          # Lowered for better hit rate
+            tp_rr_mult=2.5,               # Base R:R (dynamic)
+            require_fvg=True,
+            require_displacement=True,
+            # IMPROVED - Faster OB expiration
+            max_age_bars=150,             # Was 500 - fresher OBs
+            # IMPROVED - Longer MSS window
+            mss_confirmation_bars=20,     # Was 10 - more time for MSS
+            # NEW - Trend Filter
+            use_trend_filter=True,        # Only trade WITH the trend
+            ema_fast=50,
+            ema_slow=200,
+            # NEW - Dynamic R:R
+            use_dynamic_rr=True,
+            low_vol_threshold=1.0,        # ATR% for low vol
+            high_vol_threshold=2.0,       # ATR% for high vol
+            # NEW - Partial Take Profit
+            use_partial_tp=True,
+            partial_tp_percent=0.5,       # Close 50% at TP1
+            tp1_rr_mult=1.5,              # TP1 at 1.5x risk
+            tp2_rr_mult=3.0,              # TP2 at 3x risk
+            # NEW - ATR Stop Loss Buffer
+            sl_atr_buffer=0.5,            # 0.5 ATR buffer on SL
+            position_size=0.5
+        )
+    elif strategy_name == "orderblock_premium_v3":
+        strategy = OrderBlockStrategyPremiumV3(
+            input_range=25,
+            min_risk_reward=1.5,
+            require_fvg=True,
+            require_displacement=True,
+            mss_confirmation_bars=20,
+            # ADAPTIVE PHASE THRESHOLDS
+            phase1_trades=10,             # Aggressive for first 10 trades
+            phase2_trades=20,             # Transition for trades 11-20
+            # PHASE 1: AGGRESSIVE (like V1)
+            phase1_max_age=300,           # Longer OB life
+            phase1_rr=3.0,                # Higher R:R target
+            phase1_sl_buffer=0.3,         # Tighter SL
+            # PHASE 2: TRANSITION
+            phase2_max_age=200,
+            phase2_rr=2.5,
+            phase2_sl_buffer=0.4,
+            phase2_soft_trend=True,       # Warn but don't block
+            # PHASE 3: CONSERVATIVE (like V2)
+            phase3_max_age=150,
+            phase3_sl_buffer=0.5,
+            # Trend Filter (Phase 2-3)
+            ema_fast=50,
+            ema_slow=200,
+            # Dynamic R:R (Phase 2-3)
+            low_vol_threshold=1.0,
+            high_vol_threshold=2.0,
+            # Partial TP (Phase 3 only)
+            partial_tp_percent=0.5,
+            tp1_rr_mult=1.5,
+            tp2_rr_mult=3.0,
+            position_size=0.5
+        )
     elif strategy_name == "sma":
         strategy = SimpleSMACrossover(10, 20)
     else:
@@ -488,8 +555,8 @@ def main():
     parser.add_argument('--days', type=int, default=60,
                         help='Days of data')
     parser.add_argument('--strategy', type=str, default='orderblock',
-                        choices=['orderblock', 'orderblock_all', 'orderblock_inverse', 'orderblock_premium', 'sma'],
-                        help='Strategy: orderblock, orderblock_all (mitigated), orderblock_inverse (contrarian), orderblock_premium (FVG+displacement), sma')
+                        choices=['orderblock', 'orderblock_all', 'orderblock_inverse', 'orderblock_premium', 'orderblock_premium_v2', 'orderblock_premium_v3', 'sma'],
+                        help='Strategy: orderblock, orderblock_premium (v1), orderblock_premium_v2 (trend filter), orderblock_premium_v3 (adaptive hybrid), sma')
     parser.add_argument('--capital', type=float, default=10000,
                         help='Initial capital')
     parser.add_argument('--real-data', action='store_true',
