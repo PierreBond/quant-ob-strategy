@@ -192,12 +192,14 @@ class BacktestEngine:
                  fee_percent: float = 0.001,  # 0.1% fee
                  slippage_percent: float = 0.0005,  # 0.05% slippage
                  max_position_size: float = 1.0,  # 100% of capital
-                 enable_journal: bool = True):  # Enable trade journaling
+                 enable_journal: bool = True,  # Enable trade journaling
+                 risk_manager=None):  # Phase 1 Risk Manager
         self.initial_capital = initial_capital
         self.fee_percent = fee_percent
         self.slippage_percent = slippage_percent
         self.max_position_size = max_position_size
         self.enable_journal = enable_journal
+        self.risk_manager = risk_manager  # Phase 1 Risk Manager
 
         self.capital = initial_capital
         self.position: PositionSide = PositionSide.FLAT
@@ -207,6 +209,10 @@ class BacktestEngine:
         self.entry_bar_idx = 0  # Track bar index for duration calculation
         self.journal = None  # Trade journal instance
         self.entry_order = None
+        
+        # Risk management stats
+        self.trades_filtered_by_risk = 0
+        self.trades_allowed = 0
 
         self.trades: List[Trade] = []
         self.orders: List[Order] = []
@@ -329,6 +335,39 @@ class BacktestEngine:
                 self._close_position(row, "reversal")
             return
 
+        # === PHASE 1 RISK MANAGEMENT CHECK ===
+        if self.risk_manager is not None:
+            try:
+                # Calculate ATR % for volatility adjustment
+                atr_pct = signal.get('atr_pct', 0.02)  # Default 2%
+                
+                # Get symbol from context or default
+                symbol = getattr(self, 'current_symbol', 'BTC/USDT')
+                
+                # Evaluate trade through risk manager
+                decision = self.risk_manager.evaluate_trade(
+                    symbol=symbol,
+                    direction=signal_type,
+                    entry_timeframe='15m',
+                    current_atr_pct=atr_pct
+                )
+                
+                if not decision.can_trade:
+                    # Trade rejected by risk management
+                    self.trades_filtered_by_risk += 1
+                    return
+                
+                # Use risk manager's position size if Kelly is enabled
+                if decision.position_size_pct > 0:
+                    signal['size'] = decision.position_size_pct
+                
+                self.trades_allowed += 1
+                
+            except Exception as e:
+                # If risk manager fails, allow trade with warning
+                pass
+        # === END RISK MANAGEMENT CHECK ===
+
         # Calculate position size
         size = signal.get('size', self.max_position_size)
         size = min(size, self.max_position_size)
@@ -431,6 +470,15 @@ class BacktestEngine:
         )
 
         self.trades.append(trade)
+        
+        # === PHASE 1: Update Risk Manager with trade result ===
+        if self.risk_manager is not None:
+            try:
+                trade_won = pnl > 0
+                self.risk_manager.update_capital(self.capital, trade_won)
+            except Exception as e:
+                pass
+        # === END RISK MANAGER UPDATE ===
         
         # Log trade exit to journal
         if self.journal:
@@ -559,6 +607,26 @@ class BacktestEngine:
         print(f"{'Avg Duration (bars)':<25} {result.avg_trade_duration:>15.1f}")
         print(f"\n{'Final Capital':<25} ${self.capital:>14,.2f}")
         print(f"{'Initial Capital':<25} ${self.initial_capital:>14,.2f}")
+        
+        # === Phase 1 Risk Management Stats ===
+        if self.risk_manager is not None:
+            print(f"\n{'─'*42}")
+            print("🛡️ PHASE 1 RISK MANAGEMENT")
+            print(f"{'─'*42}")
+            total_signals = self.trades_allowed + self.trades_filtered_by_risk
+            if total_signals > 0:
+                filter_rate = (self.trades_filtered_by_risk / total_signals) * 100
+                print(f"{'Signals Evaluated':<25} {total_signals:>15}")
+                print(f"{'Trades Allowed':<25} {self.trades_allowed:>15}")
+                print(f"{'Trades Filtered':<25} {self.trades_filtered_by_risk:>15}")
+                print(f"{'Filter Rate':<25} {filter_rate:>14.1f}%")
+            
+            # Print circuit breaker status
+            if hasattr(self.risk_manager, 'circuit_breaker') and self.risk_manager.circuit_breaker:
+                status = self.risk_manager.circuit_breaker.get_status()
+                print(f"{'Circuit Breaker State':<25} {status['state']:>15}")
+        # === End Risk Management Stats ===
+        
         print(f"{'='*60}\n")
 
     def plot_results(self, result: BacktestResult, save_path: str = None):

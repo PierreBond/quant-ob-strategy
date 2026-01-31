@@ -208,8 +208,13 @@ def run_backtest(symbol: str = "BTC/USDT",
                  initial_capital: float = 10000.0,
                  use_real_data: bool = False,
                  exchange: str = "binance",
-                 timeframe: str = "15m"):
-    """Run backtest"""
+                 timeframe: str = "15m",
+                 use_risk_management: bool = False,
+                 use_mtf: bool = True,
+                 use_funding: bool = False,
+                 use_circuit_breaker: bool = True,
+                 use_kelly: bool = True):
+    """Run backtest with optional Phase 1 risk management"""
 
     print(f"\n{'='*60}")
     print(f"BACKTEST MODE")
@@ -219,6 +224,18 @@ def run_backtest(symbol: str = "BTC/USDT",
     print(f"Strategy: {strategy_name}")
     print(f"Initial Capital: ${initial_capital:,.2f}")
     print(f"Data Source: {'Real (' + exchange + ')' if use_real_data else 'Simulated'}")
+    
+    # Phase 1 Risk Management status
+    if use_risk_management:
+        print(f"\n🛡️ PHASE 1 RISK MANAGEMENT: ENABLED")
+        print(f"   • Kelly Criterion:    {'✅' if use_kelly else '❌'}")
+        print(f"   • Circuit Breaker:    {'✅' if use_circuit_breaker else '❌'}")
+        print(f"   • Multi-Timeframe:    {'✅' if use_mtf else '❌'}")
+        print(f"   • Funding Filter:     {'✅' if use_funding else '❌'}")
+    else:
+        print(f"\n🛡️ PHASE 1 RISK MANAGEMENT: DISABLED")
+        print(f"   (Use --risk-mgmt to enable)")
+    
     print(f"{'='*60}\n")
 
     # Create directories
@@ -241,12 +258,37 @@ def run_backtest(symbol: str = "BTC/USDT",
     # Select strategy using factory function
     strategy = get_strategy_instance(strategy_name, timeframe)
 
+    # Initialize Phase 1 Risk Manager if enabled
+    risk_manager = None
+    if use_risk_management:
+        try:
+            from utils import RiskManager
+            risk_manager = RiskManager(
+                capital=initial_capital,
+                exchange_id=exchange,
+                use_mtf=use_mtf,
+                use_funding=use_funding,
+                use_circuit_breaker=use_circuit_breaker,
+                use_kelly=use_kelly
+            )
+            print("🛡️ Risk Manager initialized")
+            
+            # Pre-fetch MTF data if enabled
+            if use_mtf:
+                print("📊 Pre-fetching multi-timeframe data...")
+                risk_manager.load_mtf_data(symbol, force=True)
+                
+        except ImportError as e:
+            print(f"⚠️ Could not load Risk Manager: {e}")
+            risk_manager = None
+
     # Run backtest
     print(f"\nRunning backtest with {strategy.name}...")
     engine = BacktestEngine(
         initial_capital=initial_capital,
         fee_percent=0.001,
-        slippage_percent=0.0005
+        slippage_percent=0.0005,
+        risk_manager=risk_manager  # Pass risk manager to engine
     )
 
     result = engine.run(df, strategy, verbose=True)
@@ -1009,6 +1051,18 @@ def main():
                         help='Paper trading mode')
     parser.add_argument('--live', action='store_true',
                         help='Live trading (requires API keys)')
+    
+    # Phase 1 Risk Management flags
+    parser.add_argument('--risk-mgmt', action='store_true',
+                        help='Enable Phase 1 risk management (Kelly, Circuit Breaker, MTF, Funding)')
+    parser.add_argument('--no-mtf', action='store_true',
+                        help='Disable multi-timeframe confirmation (used with --risk-mgmt)')
+    parser.add_argument('--no-kelly', action='store_true',
+                        help='Disable Kelly Criterion sizing (used with --risk-mgmt)')
+    parser.add_argument('--no-circuit-breaker', action='store_true',
+                        help='Disable circuit breaker (used with --risk-mgmt)')
+    parser.add_argument('--use-funding', action='store_true',
+                        help='Enable funding rate filter (used with --risk-mgmt)')
 
     args = parser.parse_args()
 
@@ -1020,7 +1074,12 @@ def main():
             initial_capital=args.capital,
             use_real_data=args.real_data,
             exchange=args.exchange,
-            timeframe=args.timeframe
+            timeframe=args.timeframe,
+            use_risk_management=args.risk_mgmt,
+            use_mtf=not args.no_mtf,
+            use_funding=args.use_funding,
+            use_circuit_breaker=not args.no_circuit_breaker,
+            use_kelly=not args.no_kelly
         )
     elif args.mode == 'live':
         run_live(
