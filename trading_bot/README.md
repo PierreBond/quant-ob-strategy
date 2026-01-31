@@ -303,6 +303,184 @@ All backtest results are saved to:
 
 ---
 
+## 🛡️ Phase 1: Risk Management Features
+
+Advanced risk management tools to improve capital preservation and trade quality.
+
+### Features Overview
+
+| Feature | Module | Purpose |
+|---------|--------|---------|
+| **Kelly Criterion** | `utils/position_sizing.py` | Optimal position sizing based on win rate & profit factor |
+| **Circuit Breaker** | `utils/circuit_breaker.py` | Auto-pause trading on drawdown/loss limits |
+| **Multi-Timeframe** | `utils/multi_timeframe.py` | Confirm trades with higher TF trend |
+| **Funding Rate** | `utils/funding_rate.py` | Filter trades based on futures funding |
+| **Risk Manager** | `utils/risk_manager.py` | Unified manager combining all features |
+
+### Test All Risk Features
+
+```bash
+# Test all Phase 1 risk management features
+python main.py --mode risk-test --symbol BTC/USDT --exchange binance
+```
+
+**Expected Output:**
+```
+✅ All Phase 1 modules imported successfully
+
+TEST 1: KELLY CRITERION POSITION SIZING
+  Win Rate: 50.0%, Profit Factor: 1.79 → Recommended: 5.5%
+  ✅ PASS
+
+TEST 2: CIRCUIT BREAKER
+  3 consecutive losses → PAUSED (1 min cooldown)
+  ✅ PASS
+
+TEST 3: MULTI-TIMEFRAME ANALYSIS
+  15m: STRONG_BEARISH, 1h: STRONG_BEARISH, 4h: STRONG_BEARISH
+  LONG: ❌ (0/2), SHORT: ✅ (2/2)
+  ✅ PASS
+
+TEST 4: FUNDING RATE FILTER
+  Current: 0.0023%, Annualized: 2.49%, Sentiment: neutral
+  ✅ PASS
+
+TEST 5: UNIFIED RISK MANAGER
+  LONG: ❌ (MTF rejection), SHORT: ✅ (2.0% size)
+  ✅ PASS
+```
+
+### Using Risk Manager in Strategy
+
+```python
+from utils import RiskManager
+
+# Initialize with your capital
+rm = RiskManager(
+    capital=10000,
+    exchange_id='binance',
+    use_mtf=True,           # Multi-timeframe confirmation
+    use_funding=True,       # Funding rate filter
+    use_circuit_breaker=True,  # Auto-pause on losses
+    use_kelly=True          # Kelly position sizing
+)
+
+# Before taking any trade
+decision = rm.evaluate_trade(
+    symbol='BTC/USDT',
+    direction='LONG',      # or 'SHORT'
+    entry_timeframe='15m'
+)
+
+if decision.can_trade:
+    print(f"✅ Trade approved: {decision.position_size_pct:.1%} position")
+    # Execute trade with decision.position_size_pct
+else:
+    print(f"❌ Trade rejected: {decision.reasons}")
+
+# After trade closes, update the manager
+rm.update_capital(new_balance, trade_won=True)
+```
+
+### Individual Components
+
+#### Kelly Criterion (Position Sizing)
+```python
+from utils import PositionSizer
+
+sizer = PositionSizer(
+    max_position_pct=0.25,    # Max 25% per trade
+    kelly_fraction=0.25,      # Use 1/4 Kelly (conservative)
+    min_trades_for_kelly=20   # Need 20+ trades for Kelly
+)
+
+# Record trades to build history
+sizer.add_trade(pnl_pct=0.03, won=True)   # 3% win
+sizer.add_trade(pnl_pct=-0.02, won=False) # 2% loss
+
+# Get recommended size
+size, reason = sizer.get_position_size(current_atr_pct=0.02)
+print(f"Recommended: {size:.1%} - {reason}")
+```
+
+#### Circuit Breaker (Auto-Pause)
+```python
+from utils import CircuitBreaker, CircuitBreakerConfig
+
+config = CircuitBreakerConfig(
+    max_drawdown_pct=0.15,      # 15% max drawdown → STOP
+    max_daily_loss_pct=0.05,    # 5% daily loss → PAUSE
+    max_consecutive_losses=5,    # 5 losses → PAUSE
+    cooldown_minutes=60          # 1 hour cooldown
+)
+
+breaker = CircuitBreaker(config)
+breaker.initialize(capital=10000)
+
+# After each trade
+breaker.update(current_capital=9500, trade_won=False)
+
+# Before next trade
+if breaker.can_trade():
+    # Execute trade
+    pass
+else:
+    print(f"Trading paused: {breaker.get_status()['state']}")
+```
+
+#### Multi-Timeframe Analysis
+```python
+from utils import MultiTimeframeAnalyzer
+
+mtf = MultiTimeframeAnalyzer(exchange_id='binance')
+
+# Fetch data for multiple timeframes
+mtf.fetch_all_timeframes('BTC/USDT', timeframes=['15m', '1h', '4h', '1d'])
+
+# Check if higher TFs confirm your trade
+confirmed, details = mtf.get_confirmation('15m', 'LONG')
+if confirmed:
+    print(f"LONG confirmed by {details['confirmation_rate']} higher TFs")
+else:
+    print("LONG rejected - higher TFs don't confirm")
+
+# Get overall trend score (-1 to +1)
+score, description = mtf.get_trend_alignment_score()
+print(f"Trend: {description} (score: {score:+.2f})")
+```
+
+#### Funding Rate Filter
+```python
+from utils import FundingRateFilter
+
+funding = FundingRateFilter(exchange_id='binance')
+
+# Check funding for a symbol
+info = funding.get_funding_rate('BTCUSDT')
+print(f"Funding: {info.rate_pct:.4f}% ({info.sentiment})")
+
+# Check if trade should be avoided
+avoid, reason = funding.should_avoid_trade('BTCUSDT', 'LONG')
+if avoid:
+    print(f"Skip LONG: {reason}")
+
+# Get contrarian bias
+bias, confidence, reason = funding.get_funding_bias('BTCUSDT')
+print(f"Funding bias: {bias} (confidence: {confidence:.0%})")
+```
+
+### Risk Management Thresholds
+
+| Metric | Default | Action |
+|--------|---------|--------|
+| Max Drawdown | 15% | **STOP** trading (manual reset) |
+| Daily Loss | 5% | **PAUSE** (4hr cooldown) |
+| Consecutive Losses | 5 | **PAUSE** (1hr cooldown) |
+| MTF Alignment | 50% | Reject if < 50% TFs confirm |
+| Extreme Funding | ±0.05% | Warn/avoid overleveraged side |
+
+---
+
 ## ⚠️ Important Recommendations
 
 | Rule | Explanation |

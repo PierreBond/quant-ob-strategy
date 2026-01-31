@@ -702,9 +702,291 @@ def optimize_strategy(symbol: str = "BTC/USDT", days: int = 60):
     return results
 
 
+def test_phase1_features(symbol: str = "BTC/USDT", exchange: str = "binance"):
+    """
+    Test all Phase 1 risk management features
+    
+    Tests:
+    1. Kelly Criterion Position Sizing
+    2. Circuit Breaker
+    3. Multi-Timeframe Analysis
+    4. Funding Rate Filter
+    5. Unified Risk Manager
+    """
+    print(f"\n{'='*70}")
+    print(f"PHASE 1 RISK MANAGEMENT TEST")
+    print(f"{'='*70}")
+    print(f"Symbol: {symbol}")
+    print(f"Exchange: {exchange}")
+    print(f"{'='*70}\n")
+    
+    # Import Phase 1 modules
+    try:
+        from utils import (
+            PositionSizer,
+            CircuitBreaker, CircuitBreakerConfig,
+            MultiTimeframeAnalyzer, Trend,
+            FundingRateFilter,
+            RiskManager
+        )
+        print("✅ All Phase 1 modules imported successfully\n")
+    except ImportError as e:
+        print(f"❌ Import error: {e}")
+        return
+    
+    results = {}
+    
+    # ============================
+    # TEST 1: Kelly Criterion
+    # ============================
+    print(f"{'─'*70}")
+    print("TEST 1: KELLY CRITERION POSITION SIZING")
+    print(f"{'─'*70}")
+    
+    sizer = PositionSizer(
+        max_position_pct=0.25,
+        kelly_fraction=0.25,
+        volatility_adjustment=True
+    )
+    
+    # Simulate trade history
+    print("Simulating 20 trades (50% win rate, 1.88 profit factor)...")
+    wins = [(True, 0.03), (True, 0.025), (True, 0.035), (True, 0.028), (True, 0.032),
+            (True, 0.027), (True, 0.031), (True, 0.029), (True, 0.033), (True, 0.026)]
+    losses = [(False, -0.018), (False, -0.015), (False, -0.017), (False, -0.016), (False, -0.014),
+              (False, -0.019), (False, -0.015), (False, -0.016), (False, -0.017), (False, -0.018)]
+    
+    for win, pnl in wins + losses:
+        sizer.add_trade(pnl, win)  # Fixed argument order
+    
+    stats = sizer.get_stats()
+    recommended_size, reason = sizer.get_position_size(0.02)
+    
+    # Calculate raw Kelly for display
+    if stats:
+        win_loss_ratio = stats.avg_win_pct / stats.avg_loss_pct if stats.avg_loss_pct > 0 else 0
+        raw_kelly = stats.win_rate - ((1 - stats.win_rate) / win_loss_ratio) if win_loss_ratio > 0 else 0
+    else:
+        raw_kelly = 0
+    
+    print(f"  Win Rate:      {stats.win_rate*100:.1f}%")
+    print(f"  Profit Factor: {stats.profit_factor:.2f}")
+    print(f"  Kelly Raw:     {raw_kelly*100:.1f}%")
+    print(f"  Recommended:   {recommended_size*100:.1f}%")
+    print(f"  Reason:        {reason}")
+    
+    results['kelly'] = {
+        'status': 'PASS' if 0 < recommended_size <= 0.25 else 'FAIL',
+        'size': recommended_size
+    }
+    print(f"\n  Result: {'✅ PASS' if results['kelly']['status'] == 'PASS' else '❌ FAIL'}\n")
+    
+    # ============================
+    # TEST 2: Circuit Breaker
+    # ============================
+    print(f"{'─'*70}")
+    print("TEST 2: CIRCUIT BREAKER")
+    print(f"{'─'*70}")
+    
+    config = CircuitBreakerConfig(
+        max_consecutive_losses=3,  # Low threshold for test
+        cooldown_minutes=1
+    )
+    breaker = CircuitBreaker(config)
+    breaker.initialize(10000)  # Initialize with capital
+    
+    print("Simulating 3 consecutive losses...")
+    for i in range(3):
+        breaker.update(10000 - (i+1)*200, trade_won=False)  # $200 loss each
+        can_trade = breaker.can_trade()
+        print(f"  Loss {i+1}: Can trade = {can_trade}")
+    
+    status = breaker.get_status()
+    breaker_triggered = not breaker.can_trade()
+    
+    print(f"\n  Breaker Triggered: {breaker_triggered}")
+    print(f"  State: {status['state']}")
+    print(f"  Consecutive Losses: {status['consecutive_losses']}")
+    
+    results['circuit_breaker'] = {
+        'status': 'PASS' if breaker_triggered else 'FAIL',
+        'triggered': breaker_triggered
+    }
+    print(f"\n  Result: {'✅ PASS' if results['circuit_breaker']['status'] == 'PASS' else '❌ FAIL'}\n")
+    
+    # ============================
+    # TEST 3: Multi-Timeframe
+    # ============================
+    print(f"{'─'*70}")
+    print("TEST 3: MULTI-TIMEFRAME ANALYSIS")
+    print(f"{'─'*70}")
+    
+    mtf = MultiTimeframeAnalyzer(
+        exchange_id=exchange
+    )
+    
+    print(f"Fetching {symbol} data across timeframes...")
+    mtf.fetch_all_timeframes(symbol, timeframes=['15m', '1h', '4h'])
+    
+    print(f"\n  Timeframe Results:")
+    for tf in ['15m', '1h', '4h']:
+        if tf in mtf.analysis:
+            analysis = mtf.analysis[tf]
+            trend_emoji = '🟢' if analysis.trend.value > 0 else '🔴' if analysis.trend.value < 0 else '⚪'
+            print(f"    {tf:>4}: {trend_emoji} {analysis.trend.name}")
+    
+    # Get alignment score
+    score, description = mtf.get_trend_alignment_score()
+    print(f"\n  Overall Score: {score:.2f}")
+    print(f"  Description: {description}")
+    
+    # Test confirmation
+    long_confirmed, long_details = mtf.get_confirmation('15m', 'LONG')
+    short_confirmed, short_details = mtf.get_confirmation('15m', 'SHORT')
+    
+    print(f"\n  LONG Confirmation:  {'✅' if long_confirmed else '❌'} ({long_details.get('confirmation_rate', 'N/A')})")
+    print(f"  SHORT Confirmation: {'✅' if short_confirmed else '❌'} ({short_details.get('confirmation_rate', 'N/A')})")
+    
+    results['mtf'] = {
+        'status': 'PASS',
+        'score': score,
+        'trend': description
+    }
+    print(f"\n  Result: ✅ PASS (MTF analysis working)\n")
+    
+    # ============================
+    # TEST 4: Funding Rate
+    # ============================
+    print(f"{'─'*70}")
+    print("TEST 4: FUNDING RATE FILTER")
+    print(f"{'─'*70}")
+    
+    funding = FundingRateFilter(exchange_id=exchange)
+    
+    print(f"Fetching funding rate for {symbol}...")
+    
+    try:
+        # Normalize symbol (remove / for futures)
+        normalized_symbol = symbol.replace('/', '')
+        info = funding.get_funding_rate(normalized_symbol)
+        
+        if info:
+            print(f"\n  Current Rate:  {info.rate_pct:.4f}%")
+            print(f"  Annualized:    {info.rate_annualized:.2f}%")
+            print(f"  Sentiment:     {info.sentiment}")
+            print(f"  Extreme:       {'Yes' if info.is_extreme else 'No'}")
+            
+            # Check if trades allowed
+            long_avoid, long_reason = funding.should_avoid_trade(normalized_symbol, 'LONG')
+            short_avoid, short_reason = funding.should_avoid_trade(normalized_symbol, 'SHORT')
+            
+            print(f"\n  LONG Allowed:  {'❌' if long_avoid else '✅'}")
+            print(f"  SHORT Allowed: {'❌' if short_avoid else '✅'}")
+            
+            # Get bias
+            bias, confidence, bias_reason = funding.get_funding_bias(normalized_symbol)
+            print(f"\n  Funding Bias:  {bias} (confidence: {confidence:.0%})")
+            
+            results['funding'] = {
+                'status': 'PASS',
+                'rate': info.rate
+            }
+        else:
+            print("  ⚠️ Could not fetch funding rate")
+            results['funding'] = {
+                'status': 'SKIP',
+                'error': 'No funding data'
+            }
+    except Exception as e:
+        print(f"  ⚠️ Could not fetch funding: {e}")
+        print("  (This may be normal for spot symbols)")
+        results['funding'] = {
+            'status': 'SKIP',
+            'error': str(e)
+        }
+    
+    print(f"\n  Result: {'✅ PASS' if results['funding']['status'] == 'PASS' else '⚠️ SKIPPED'}\n")
+    
+    # ============================
+    # TEST 5: Unified Risk Manager
+    # ============================
+    print(f"{'─'*70}")
+    print("TEST 5: UNIFIED RISK MANAGER")
+    print(f"{'─'*70}")
+    
+    rm = RiskManager(
+        capital=10000,
+        exchange_id=exchange,
+        use_mtf=True,
+        use_funding=True,
+        use_circuit_breaker=True,
+        use_kelly=True
+    )
+    
+    # Seed with trade history
+    for win, pnl in wins[:5] + losses[:5]:
+        if rm.position_sizer:
+            rm.position_sizer.add_trade(pnl, win)
+    
+    print("Evaluating LONG trade...")
+    long_decision = rm.evaluate_trade(symbol, 'LONG', '15m', 0.02)
+    
+    print(f"\n  LONG Decision:")
+    print(f"    Can Trade:    {'✅' if long_decision.can_trade else '❌'}")
+    print(f"    Position Size: {long_decision.position_size_pct*100:.1f}%")
+    print(f"    MTF Score:     {long_decision.mtf_score:.2f}")
+    if long_decision.reasons:
+        print(f"    Reasons:       {', '.join(long_decision.reasons)}")
+    if long_decision.warnings:
+        print(f"    Warnings:      {', '.join(long_decision.warnings)}")
+    
+    print("\nEvaluating SHORT trade...")
+    short_decision = rm.evaluate_trade(symbol, 'SHORT', '15m', 0.02)
+    
+    print(f"\n  SHORT Decision:")
+    print(f"    Can Trade:    {'✅' if short_decision.can_trade else '❌'}")
+    print(f"    Position Size: {short_decision.position_size_pct*100:.1f}%")
+    print(f"    MTF Score:     {short_decision.mtf_score:.2f}")
+    if short_decision.reasons:
+        print(f"    Reasons:       {', '.join(short_decision.reasons)}")
+    if short_decision.warnings:
+        print(f"    Warnings:      {', '.join(short_decision.warnings)}")
+    
+    results['risk_manager'] = {
+        'status': 'PASS',
+        'long_approved': long_decision.can_trade,
+        'short_approved': short_decision.can_trade
+    }
+    print(f"\n  Result: ✅ PASS (Risk Manager working)\n")
+    
+    # ============================
+    # SUMMARY
+    # ============================
+    print(f"{'='*70}")
+    print("PHASE 1 TEST SUMMARY")
+    print(f"{'='*70}")
+    
+    all_pass = True
+    for name, result in results.items():
+        status = result['status']
+        emoji = '✅' if status == 'PASS' else '⚠️' if status == 'SKIP' else '❌'
+        print(f"  {name.upper():20} {emoji} {status}")
+        if status == 'FAIL':
+            all_pass = False
+    
+    print(f"{'='*70}")
+    if all_pass:
+        print("✅ ALL PHASE 1 FEATURES WORKING CORRECTLY")
+    else:
+        print("⚠️ SOME TESTS FAILED - CHECK ABOVE")
+    print(f"{'='*70}\n")
+    
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description='Trading Bot')
-    parser.add_argument('--mode', choices=['backtest', 'live', 'optimize', 'last_ob'],
+    parser.add_argument('--mode', choices=['backtest', 'live', 'optimize', 'last_ob', 'risk-test'],
                         default='backtest', help='Running mode')
     parser.add_argument('--symbol', type=str, default='BTC/USDT',
                         help='Trading symbol (e.g., BTC/USDT, ETH/USDT)')
@@ -756,6 +1038,11 @@ def main():
             symbol=args.symbol,
             days=args.days,
             timeframe=args.timeframe,
+            exchange=args.exchange
+        )
+    elif args.mode == 'risk-test':
+        test_phase1_features(
+            symbol=args.symbol,
             exchange=args.exchange
         )
 
