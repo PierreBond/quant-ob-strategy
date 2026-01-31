@@ -238,119 +238,8 @@ def run_backtest(symbol: str = "BTC/USDT",
         print(f"Data range: {df.index[0]} to {df.index[-1]}")
         print(f"Price range: ${df['low'].min():,.0f} - ${df['high'].max():,.0f}")
 
-    # Select strategy
-    if strategy_name == "orderblock":
-        strategy = OrderBlockStrategy(
-            input_range=25,
-            min_risk_reward=1.5,
-            sl_atr_mult=2.0,
-            tp_rr_mult=2.0,
-            first_retest_only=True,
-            position_size=0.5
-        )
-    elif strategy_name == "orderblock_all":
-        strategy = OrderBlockStrategyAll(
-            input_range=25,
-            min_risk_reward=1.5,
-            sl_atr_mult=2.0,
-            tp_rr_mult=2.0,
-            max_retests=3,  # Trade each OB up to 3 times
-            position_size=0.5,
-            mitigated_size_mult=0.5  # Half size for mitigated OBs
-        )
-    elif strategy_name == "orderblock_inverse":
-        strategy = OrderBlockStrategyInverse(
-            input_range=25,
-            min_risk_reward=1.5,
-            sl_atr_mult=2.0,
-            tp_rr_mult=2.0,
-            first_retest_only=True,
-            position_size=0.5
-        )
-    elif strategy_name == "orderblock_premium":
-        strategy = OrderBlockStrategyPremium(
-            input_range=25,
-            min_risk_reward=2.0,      # Higher RR for premium setups
-            sl_atr_mult=1.0,          # Tighter SL (based on MSS swing)
-            tp_rr_mult=3.0,           # At least 3x risk
-            require_fvg=True,         # Must have Fair Value Gap
-            min_fvg_percent=0.1,      # Min 0.1% FVG
-            require_displacement=True, # Must have strong momentum
-            min_displacement_percent=0.5,  # Min 0.5% move
-            min_displacement_candles=2,    # Min 2 consecutive candles
-            require_ob_mss=False,     # Set True for only trend reversal OBs
-            mss_confirmation_bars=20, # Bars to wait for entry MSS confirmation
-            mss_swing_lookback=5,     # Bars to find swing for MSS
-            first_retest_only=True,
-            position_size=0.5
-        )
-    elif strategy_name == "orderblock_premium_v2":
-        strategy = OrderBlockStrategyPremiumV2(
-            input_range=25,
-            # Core Settings
-            min_risk_reward=1.5,          # Lowered for better hit rate
-            tp_rr_mult=2.5,               # Base R:R (dynamic)
-            require_fvg=True,
-            require_displacement=True,
-            # IMPROVED - Faster OB expiration
-            max_age_bars=150,             # Was 500 - fresher OBs
-            # IMPROVED - Longer MSS window
-            mss_confirmation_bars=20,     # Was 10 - more time for MSS
-            # NEW - Trend Filter
-            use_trend_filter=True,        # Only trade WITH the trend
-            ema_fast=50,
-            ema_slow=200,
-            # NEW - Dynamic R:R
-            use_dynamic_rr=True,
-            low_vol_threshold=1.0,        # ATR% for low vol
-            high_vol_threshold=2.0,       # ATR% for high vol
-            # NEW - Partial Take Profit
-            use_partial_tp=True,
-            partial_tp_percent=0.5,       # Close 50% at TP1
-            tp1_rr_mult=1.5,              # TP1 at 1.5x risk
-            tp2_rr_mult=3.0,              # TP2 at 3x risk
-            # NEW - ATR Stop Loss Buffer
-            sl_atr_buffer=0.5,            # 0.5 ATR buffer on SL
-            position_size=0.5
-        )
-    elif strategy_name == "orderblock_premium_v3":
-        strategy = OrderBlockStrategyPremiumV3(
-            input_range=25,
-            min_risk_reward=1.5,
-            require_fvg=True,
-            require_displacement=True,
-            mss_confirmation_bars=20,
-            # ADAPTIVE PHASE THRESHOLDS
-            phase1_trades=10,             # Aggressive for first 10 trades
-            phase2_trades=20,             # Transition for trades 11-20
-            # PHASE 1: AGGRESSIVE (like V1)
-            phase1_max_age=300,           # Longer OB life
-            phase1_rr=3.0,                # Higher R:R target
-            phase1_sl_buffer=0.3,         # Tighter SL
-            # PHASE 2: TRANSITION
-            phase2_max_age=200,
-            phase2_rr=2.5,
-            phase2_sl_buffer=0.4,
-            phase2_soft_trend=True,       # Warn but don't block
-            # PHASE 3: CONSERVATIVE (like V2)
-            phase3_max_age=150,
-            phase3_sl_buffer=0.5,
-            # Trend Filter (Phase 2-3)
-            ema_fast=50,
-            ema_slow=200,
-            # Dynamic R:R (Phase 2-3)
-            low_vol_threshold=1.0,
-            high_vol_threshold=2.0,
-            # Partial TP (Phase 3 only)
-            partial_tp_percent=0.5,
-            tp1_rr_mult=1.5,
-            tp2_rr_mult=3.0,
-            position_size=0.5
-        )
-    elif strategy_name == "sma":
-        strategy = SimpleSMACrossover(10, 20)
-    else:
-        strategy = OrderBlockStrategy()
+    # Select strategy using factory function
+    strategy = get_strategy_instance(strategy_name, timeframe)
 
     # Run backtest
     print(f"\nRunning backtest with {strategy.name}...")
@@ -386,31 +275,298 @@ def run_backtest(symbol: str = "BTC/USDT",
     return result
 
 
-def run_live(paper: bool = True, symbol: str = "BTC/USDT"):
-    """Run live trading (paper or real)"""
+def get_strategy_instance(strategy_name: str, timeframe: str = "15m"):
+    """
+    Factory function to create strategy instances
+    
+    Args:
+        strategy_name: Name of strategy
+        timeframe: Timeframe for time-based strategies
+        
+    Returns:
+        Strategy instance
+    """
+    # Parse timeframe to minutes
+    tf_map = {'1m': 1, '5m': 5, '15m': 15, '30m': 30, '1h': 60, '4h': 240, '1d': 1440}
+    tf_minutes = tf_map.get(timeframe, 15)
+    
+    if strategy_name == "orderblock":
+        return OrderBlockStrategy(
+            input_range=25,
+            min_risk_reward=1.5,
+            sl_atr_mult=2.0,
+            tp_rr_mult=2.0,
+            first_retest_only=True,
+            position_size=0.5
+        )
+    elif strategy_name == "orderblock_all":
+        return OrderBlockStrategyAll(
+            input_range=25,
+            min_risk_reward=1.5,
+            sl_atr_mult=2.0,
+            tp_rr_mult=2.0,
+            max_retests=3,
+            position_size=0.5,
+            mitigated_size_mult=0.5
+        )
+    elif strategy_name == "orderblock_inverse":
+        return OrderBlockStrategyInverse(
+            input_range=25,
+            min_risk_reward=1.5,
+            sl_atr_mult=2.0,
+            tp_rr_mult=2.0,
+            first_retest_only=True,
+            position_size=0.5
+        )
+    elif strategy_name == "orderblock_premium":
+        return OrderBlockStrategyPremium(
+            input_range=25,
+            min_risk_reward=2.0,
+            sl_atr_mult=1.0,
+            tp_rr_mult=3.0,
+            require_fvg=True,
+            min_fvg_percent=0.1,
+            require_displacement=True,
+            min_displacement_percent=0.5,
+            min_displacement_candles=2,
+            require_ob_mss=False,
+            mss_confirmation_bars=20,
+            mss_swing_lookback=5,
+            first_retest_only=True,
+            position_size=0.5
+        )
+    elif strategy_name == "orderblock_premium_v2":
+        return OrderBlockStrategyPremiumV2(
+            input_range=25,
+            min_risk_reward=1.5,
+            tp_rr_mult=2.5,
+            require_fvg=True,
+            require_displacement=True,
+            max_age_bars=150,
+            mss_confirmation_bars=20,
+            use_trend_filter=True,
+            ema_fast=50,
+            ema_slow=200,
+            use_dynamic_rr=True,
+            low_vol_threshold=1.0,
+            high_vol_threshold=2.0,
+            use_partial_tp=True,
+            partial_tp_percent=0.5,
+            tp1_rr_mult=1.5,
+            tp2_rr_mult=3.0,
+            sl_atr_buffer=0.5,
+            position_size=0.5
+        )
+    elif strategy_name == "orderblock_premium_v3":
+        return OrderBlockStrategyPremiumV3(
+            input_range=25,
+            min_risk_reward=1.5,
+            require_fvg=True,
+            require_displacement=True,
+            mss_confirmation_bars=20,
+            # TIME-BASED SETTINGS
+            aggressive_days=30,
+            timeframe_minutes=tf_minutes,
+            # AGGRESSIVE MODE (Days 1-30)
+            aggressive_max_age=500,
+            aggressive_rr=3.0,
+            aggressive_sl_buffer=0.3,
+            # CONSERVATIVE MODE (Days 31+)
+            conservative_max_age=150,
+            conservative_sl_buffer=0.5,
+            # Trend Filter (V2 mode only)
+            ema_fast=50,
+            ema_slow=200,
+            # Dynamic R:R (V2 mode only)
+            low_vol_threshold=1.0,
+            high_vol_threshold=2.0,
+            # Partial TP (V2 mode only)
+            partial_tp_percent=0.5,
+            tp1_rr_mult=1.5,
+            tp2_rr_mult=3.0,
+            position_size=0.5
+        )
+    elif strategy_name == "sma":
+        return SimpleSMACrossover(10, 20)
+    else:
+        return OrderBlockStrategy()
+
+
+def run_live(paper: bool = True, 
+             symbol: str = "BTC/USDT",
+             strategy_name: str = "orderblock_premium",
+             exchange: str = "binance",
+             timeframe: str = "15m",
+             capital: float = 10000.0):
+    """
+    Run live trading (paper or real)
+    
+    Args:
+        paper: If True, paper trading (no real orders)
+        symbol: Trading pair
+        strategy_name: Strategy to use
+        exchange: Exchange to trade on
+        timeframe: Candle timeframe
+        capital: Starting capital (for paper trading)
+    """
+    import asyncio
 
     print(f"\n{'='*60}")
     print(f"LIVE TRADING MODE")
     print(f"{'='*60}")
-    print(f"Symbol: {symbol}")
-    print(f"Mode: {'PAPER TRADING' if paper else 'REAL TRADING'}")
+    print(f"Symbol:    {symbol}")
+    print(f"Strategy:  {strategy_name}")
+    print(f"Exchange:  {exchange}")
+    print(f"Timeframe: {timeframe}")
+    print(f"Mode:      {'PAPER TRADING' if paper else '⚠️  REAL TRADING'}")
+    print(f"Capital:   ${capital:,.2f}")
     print(f"{'='*60}\n")
 
     print("⚠️  WARNING: Live trading involves real financial risk!")
     print("   Use PAPER mode to test without real money.\n")
 
-    if paper:
-        print("Paper trading enabled - no real money at risk")
-        print("\nTo enable live trading:")
-        print("  1. Set PAPER_TRADING = False in config/settings.py")
-        print("  2. Add your API keys below")
-        print("  3. Run with --live flag\n")
+    # Strategy recommendation based on trading duration
+    print("📊 STRATEGY SELECTION GUIDE:")
+    print("   ┌─────────────────────────────────────────────────────┐")
+    print("   │ Duration        │ Recommended Strategy              │")
+    print("   ├─────────────────┼───────────────────────────────────┤")
+    print("   │ ≤30 days        │ orderblock_premium (V1)           │")
+    print("   │ 31-120 days     │ orderblock_premium_v3 (Hybrid)    │")
+    print("   │ 180+ days       │ orderblock_premium_v2 (Conservative)│")
+    print("   └─────────────────────────────────────────────────────┘\n")
+    
+    # V3 special note
+    if strategy_name == "orderblock_premium_v3":
+        print("🔄 V3 HYBRID MODE ACTIVE:")
+        print("   • Days 1-30:  AGGRESSIVE (V1 style - higher R:R, less filtering)")
+        print("   • Days 31+:   CONSERVATIVE (V2 style - trend filter, partial TP)")
+        print("   • Auto-switches based on time running\n")
 
-    # This would be the live trading setup
-    print("Live trading setup requires:")
-    print("  - Exchange API keys (for real trading)")
-    print("  - Telegram token (for notifications)")
-    print("  - Running bot with: python main.py --mode live")
+    # Create strategy
+    strategy = get_strategy_instance(strategy_name, timeframe)
+    print(f"✓ Strategy initialized: {strategy.name}")
+
+    if paper:
+        print("\n📝 PAPER TRADING MODE")
+        print("   No real orders will be placed.")
+        print("   Bot will track simulated positions.\n")
+        
+        # Paper trading loop
+        print("To start paper trading:")
+        print(f"  1. Bot will fetch {symbol} data from {exchange}")
+        print(f"  2. Strategy '{strategy_name}' will generate signals")
+        print("  3. Signals will be logged (no real orders)")
+        print("\nPress Ctrl+C to stop.\n")
+        
+        # Load historical data to initialize strategy
+        print("Loading historical data to initialize strategy...")
+        df = fetch_real_data(symbol=symbol, days=7, timeframe=timeframe, exchange_id=exchange)
+        if df is not None and not df.empty:
+            strategy.on_init(df)
+            print(f"✓ Strategy initialized with {len(df)} candles")
+            print(f"  Data from: {df.index[0]}")
+            print(f"  Data to:   {df.index[-1]}")
+            print(f"  Current price: ${df['close'].iloc[-1]:,.2f}\n")
+        
+        # Simple paper trading loop
+        print("Starting paper trading loop (checking every candle)...")
+        print("=" * 60)
+        
+        import time
+        tf_seconds = {'1m': 60, '5m': 300, '15m': 900, '30m': 1800, 
+                      '1h': 3600, '4h': 14400, '1d': 86400}
+        interval = tf_seconds.get(timeframe, 900)
+        
+        position = None
+        trades = []
+        paper_capital = capital
+        
+        try:
+            while True:
+                # Fetch latest candle
+                df = fetch_real_data(symbol=symbol, days=1, timeframe=timeframe, exchange_id=exchange)
+                if df is None or df.empty:
+                    time.sleep(60)
+                    continue
+                
+                latest = df.iloc[-1]
+                current_price = latest['close']
+                
+                # Get signal
+                pos_str = position['side'] if position else "FLAT"
+                signal = strategy.on_bar(latest, pos_str)
+                
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                # Process signal
+                if signal.get('signal') == 'LONG' and position is None:
+                    position = {
+                        'side': 'LONG',
+                        'entry': current_price,
+                        'sl': signal.get('stop_loss'),
+                        'tp': signal.get('take_profit'),
+                        'time': timestamp
+                    }
+                    print(f"🟢 [{timestamp}] LONG @ ${current_price:,.2f} | SL: ${position['sl']:,.2f} | TP: ${position['tp']:,.2f}")
+                    
+                elif signal.get('signal') == 'SHORT' and position is None:
+                    position = {
+                        'side': 'SHORT',
+                        'entry': current_price,
+                        'sl': signal.get('stop_loss'),
+                        'tp': signal.get('take_profit'),
+                        'time': timestamp
+                    }
+                    print(f"🔴 [{timestamp}] SHORT @ ${current_price:,.2f} | SL: ${position['sl']:,.2f} | TP: ${position['tp']:,.2f}")
+                
+                # Check SL/TP
+                if position:
+                    if position['side'] == 'LONG':
+                        if current_price <= position['sl']:
+                            pnl = (current_price - position['entry']) / position['entry'] * 100
+                            paper_capital *= (1 + pnl/100 * 0.5)  # 50% position size
+                            print(f"🛑 [{timestamp}] LONG SL HIT @ ${current_price:,.2f} | PnL: {pnl:+.2f}% | Capital: ${paper_capital:,.2f}")
+                            position = None
+                        elif current_price >= position['tp']:
+                            pnl = (current_price - position['entry']) / position['entry'] * 100
+                            paper_capital *= (1 + pnl/100 * 0.5)
+                            print(f"✅ [{timestamp}] LONG TP HIT @ ${current_price:,.2f} | PnL: {pnl:+.2f}% | Capital: ${paper_capital:,.2f}")
+                            position = None
+                    else:  # SHORT
+                        if current_price >= position['sl']:
+                            pnl = (position['entry'] - current_price) / position['entry'] * 100
+                            paper_capital *= (1 + pnl/100 * 0.5)
+                            print(f"🛑 [{timestamp}] SHORT SL HIT @ ${current_price:,.2f} | PnL: {pnl:+.2f}% | Capital: ${paper_capital:,.2f}")
+                            position = None
+                        elif current_price <= position['tp']:
+                            pnl = (position['entry'] - current_price) / position['entry'] * 100
+                            paper_capital *= (1 + pnl/100 * 0.5)
+                            print(f"✅ [{timestamp}] SHORT TP HIT @ ${current_price:,.2f} | PnL: {pnl:+.2f}% | Capital: ${paper_capital:,.2f}")
+                            position = None
+                
+                # Status update
+                pos_status = f"{position['side']} from ${position['entry']:,.2f}" if position else "FLAT"
+                print(f"   [{timestamp}] Price: ${current_price:,.2f} | Position: {pos_status} | Capital: ${paper_capital:,.2f}", end='\r')
+                
+                # Wait for next candle
+                time.sleep(interval)
+                
+        except KeyboardInterrupt:
+            print(f"\n\n{'='*60}")
+            print("Paper trading stopped by user")
+            print(f"Final Capital: ${paper_capital:,.2f}")
+            print(f"Return: {(paper_capital/capital - 1)*100:+.2f}%")
+            print(f"{'='*60}")
+            
+    else:
+        print("\n⚠️  REAL TRADING MODE")
+        print("   This will place REAL orders with REAL money!")
+        print("\nTo enable real trading:")
+        print("  1. Create config/api_keys.json with your exchange API keys")
+        print("  2. Ensure you have sufficient balance")
+        print("  3. Start with small amounts to test")
+        print("\nAPI keys file format (config/api_keys.json):")
+        print('  {"exchange": "binance", "api_key": "xxx", "api_secret": "xxx"}')
 
 
 def print_last_orderblocks(symbol: str = "BTC/USDT",
@@ -585,7 +741,14 @@ def main():
             timeframe=args.timeframe
         )
     elif args.mode == 'live':
-        run_live(paper=not args.live, symbol=args.symbol)
+        run_live(
+            paper=not args.live,
+            symbol=args.symbol,
+            strategy_name=args.strategy,
+            exchange=args.exchange,
+            timeframe=args.timeframe,
+            capital=args.capital
+        )
     elif args.mode == 'optimize':
         optimize_strategy(symbol=args.symbol, days=args.days)
     elif args.mode == 'last_ob':

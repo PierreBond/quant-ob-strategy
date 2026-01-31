@@ -1934,35 +1934,37 @@ class OrderBlockStrategyPremiumV2(OrderBlockStrategyPremium):
 
 
 # ============================================================================
-# PREMIUM V3 - ADAPTIVE HYBRID (AGGRESSIVE SHORT-TERM, CONSERVATIVE LONG-TERM)
+# PREMIUM V3 - TIME-BASED HYBRID (V1 for 30 days, V2 after)
 # ============================================================================
 
 class OrderBlockStrategyPremiumV3(OrderBlockStrategyPremiumV2):
     """
-    Order Block Strategy - PREMIUM V3 (Adaptive Hybrid)
+    Order Block Strategy - PREMIUM V3 (Time-Based Hybrid)
     
     PHILOSOPHY:
     ===========
-    - SHORT-TERM (first 20 trades): Aggressive mode like V1
-    - LONG-TERM (after 20 trades): Conservative mode like V2
+    - FIRST 30 DAYS: Use V1 AGGRESSIVE logic (no filters, 3:1 R:R)
+    - AFTER 30 DAYS: Use V2 CONSERVATIVE logic (trend filter, dynamic R:R, partial TP)
     
     This captures the best of both worlds:
-    - V1's aggressive short-term gains
-    - V2's long-term survivability
+    - V1's aggressive short-term gains in early trading
+    - V2's long-term survivability after initial period
     
-    ADAPTIVE FEATURES:
-    ==================
-    1. TREND FILTER: Disabled for first 20 trades, then enabled
-    2. R:R TARGETS: 3:1 early, dynamic later
-    3. PARTIAL TP: Disabled early, enabled after warmup
-    4. SL BUFFER: Tighter early (0.3 ATR), wider later (0.5 ATR)
-    5. OB EXPIRATION: Longer early (300 bars), shorter later (150 bars)
+    TIME-BASED MODES:
+    =================
+    🔥 AGGRESSIVE (Days 1-30):
+       • No trend filter - trade all setups
+       • Fixed 3:1 R:R target
+       • No partial TP - let winners run
+       • Longer OB expiration (500 bars)
+       • Tighter SL buffer (0.3 ATR)
     
-    WARMUP PHASES:
-    ==============
-    Phase 1 (Trades 1-10):   AGGRESSIVE - No filters, 3:1 R:R, tight SL
-    Phase 2 (Trades 11-20):  TRANSITION - Soft trend filter, 2.5:1 R:R
-    Phase 3 (Trades 21+):    CONSERVATIVE - Full filters, dynamic R:R, partial TP
+    🛡️ CONSERVATIVE (Days 31+):
+       • Full trend filter (EMA50/EMA200)
+       • Dynamic R:R based on volatility
+       • Partial TP (50% at 1.5x)
+       • Shorter OB expiration (150 bars)
+       • Wider SL buffer (0.5 ATR)
     """
     
     def __init__(self,
@@ -1972,7 +1974,7 @@ class OrderBlockStrategyPremiumV3(OrderBlockStrategyPremiumV2):
                  # Base Trading Settings
                  min_risk_reward: float = 1.5,
                  sl_atr_mult: float = 1.0,
-                 tp_rr_mult: float = 3.0,       # Base R:R (changes with phase)
+                 tp_rr_mult: float = 3.0,
                  # FVG Settings
                  require_fvg: bool = True,
                  min_fvg_percent: float = 0.1,
@@ -1986,42 +1988,36 @@ class OrderBlockStrategyPremiumV3(OrderBlockStrategyPremiumV2):
                  mss_confirmation_bars: int = 20,
                  mss_swing_lookback: int = 5,
                  first_retest_only: bool = True,
-                 # ADAPTIVE SETTINGS
-                 # Phase thresholds
-                 phase1_trades: int = 10,       # Aggressive phase
-                 phase2_trades: int = 20,       # Transition phase
-                 # Phase 1 (Aggressive) settings
-                 phase1_max_age: int = 300,     # Longer OB life
-                 phase1_rr: float = 3.0,        # Higher R:R
-                 phase1_sl_buffer: float = 0.3, # Tighter SL
-                 # Phase 2 (Transition) settings
-                 phase2_max_age: int = 200,
-                 phase2_rr: float = 2.5,
-                 phase2_sl_buffer: float = 0.4,
-                 phase2_soft_trend: bool = True,  # Warn but don't block
-                 # Phase 3 (Conservative) settings
-                 phase3_max_age: int = 150,
-                 phase3_sl_buffer: float = 0.5,
-                 # Trend Filter
+                 # TIME-BASED SETTINGS
+                 aggressive_days: int = 30,       # Days to use V1 logic
+                 timeframe_minutes: int = 15,     # Timeframe in minutes (for bar calculation)
+                 # AGGRESSIVE MODE (V1) settings
+                 aggressive_max_age: int = 500,   # Like V1
+                 aggressive_rr: float = 3.0,      # Like V1
+                 aggressive_sl_buffer: float = 0.3,
+                 # CONSERVATIVE MODE (V2) settings
+                 conservative_max_age: int = 150,
+                 conservative_sl_buffer: float = 0.5,
+                 # Trend Filter (V2)
                  ema_fast: int = 50,
                  ema_slow: int = 200,
-                 # Dynamic R:R
+                 # Dynamic R:R (V2)
                  low_vol_threshold: float = 1.0,
                  high_vol_threshold: float = 2.0,
-                 # Partial TP (only in Phase 3)
+                 # Partial TP (V2)
                  partial_tp_percent: float = 0.5,
                  tp1_rr_mult: float = 1.5,
                  tp2_rr_mult: float = 3.0,
                  # Position Settings
                  position_size: float = 0.5):
         
-        # Initialize with V2 defaults (conservative)
+        # Initialize with aggressive settings (V1 mode)
         super().__init__(
             name=name,
             input_range=input_range,
             min_risk_reward=min_risk_reward,
             sl_atr_mult=sl_atr_mult,
-            tp_rr_mult=tp_rr_mult,
+            tp_rr_mult=aggressive_rr,          # Start with V1 R:R
             require_fvg=require_fvg,
             min_fvg_percent=min_fvg_percent,
             require_displacement=require_displacement,
@@ -2032,148 +2028,143 @@ class OrderBlockStrategyPremiumV3(OrderBlockStrategyPremiumV2):
             mss_confirmation_bars=mss_confirmation_bars,
             mss_swing_lookback=mss_swing_lookback,
             first_retest_only=first_retest_only,
-            max_age_bars=phase1_max_age,  # Start with aggressive
-            use_trend_filter=False,        # Start disabled
+            max_age_bars=aggressive_max_age,   # Start with V1 OB age
+            use_trend_filter=False,             # V1: No trend filter
             ema_fast=ema_fast,
             ema_slow=ema_slow,
-            use_partial_tp=False,          # Start disabled
+            use_partial_tp=False,               # V1: No partial TP
             partial_tp_percent=partial_tp_percent,
             tp1_rr_mult=tp1_rr_mult,
             tp2_rr_mult=tp2_rr_mult,
-            use_dynamic_rr=False,          # Start disabled
+            use_dynamic_rr=False,               # V1: Fixed R:R
             low_vol_threshold=low_vol_threshold,
             high_vol_threshold=high_vol_threshold,
-            sl_atr_buffer=phase1_sl_buffer,
+            sl_atr_buffer=aggressive_sl_buffer, # V1: Tighter SL
             position_size=position_size
         )
         
-        # Phase thresholds
-        self.phase1_trades = phase1_trades
-        self.phase2_trades = phase2_trades
+        # Time-based settings
+        self.aggressive_days = aggressive_days
+        self.timeframe_minutes = timeframe_minutes
+        self.bars_per_day = (24 * 60) // timeframe_minutes  # Calculate bars per day
+        self.aggressive_bars = aggressive_days * self.bars_per_day
         
-        # Phase 1 settings
-        self.phase1_max_age = phase1_max_age
-        self.phase1_rr = phase1_rr
-        self.phase1_sl_buffer = phase1_sl_buffer
+        # Aggressive mode settings (V1)
+        self.aggressive_max_age = aggressive_max_age
+        self.aggressive_rr = aggressive_rr
+        self.aggressive_sl_buffer = aggressive_sl_buffer
         
-        # Phase 2 settings
-        self.phase2_max_age = phase2_max_age
-        self.phase2_rr = phase2_rr
-        self.phase2_sl_buffer = phase2_sl_buffer
-        self.phase2_soft_trend = phase2_soft_trend
-        
-        # Phase 3 settings
-        self.phase3_max_age = phase3_max_age
-        self.phase3_sl_buffer = phase3_sl_buffer
+        # Conservative mode settings (V2)
+        self.conservative_max_age = conservative_max_age
+        self.conservative_sl_buffer = conservative_sl_buffer
         
         # Tracking
+        self.start_bar_index = 0
+        self.current_mode = 'aggressive'
+        self.mode_switched = False
         self.total_trades = 0
-        self.current_phase = 1
-        self.phase_stats = {1: {'trades': 0, 'wins': 0}, 
-                           2: {'trades': 0, 'wins': 0}, 
-                           3: {'trades': 0, 'wins': 0}}
+        self.mode_stats = {
+            'aggressive': {'trades': 0, 'wins': 0},
+            'conservative': {'trades': 0, 'wins': 0}
+        }
     
-    def _get_current_phase(self) -> int:
-        """Determine current trading phase based on trade count"""
-        if self.total_trades < self.phase1_trades:
-            return 1
-        elif self.total_trades < self.phase2_trades:
-            return 2
+    def _get_current_mode(self, current_idx: int) -> str:
+        """Determine current trading mode based on bars elapsed"""
+        bars_elapsed = current_idx - self.start_bar_index
+        
+        if bars_elapsed < self.aggressive_bars:
+            return 'aggressive'
         else:
-            return 3
+            return 'conservative'
     
-    def _update_phase_settings(self):
-        """Update strategy settings based on current phase"""
-        old_phase = self.current_phase
-        self.current_phase = self._get_current_phase()
+    def _get_days_elapsed(self, current_idx: int) -> float:
+        """Calculate days elapsed since start"""
+        bars_elapsed = current_idx - self.start_bar_index
+        return bars_elapsed / self.bars_per_day
+    
+    def _update_mode_settings(self, current_idx: int):
+        """Update strategy settings based on current mode"""
+        old_mode = self.current_mode
+        self.current_mode = self._get_current_mode(current_idx)
+        days_elapsed = self._get_days_elapsed(current_idx)
         
-        if old_phase != self.current_phase:
-            print(f"\n{'🔄'*20}")
-            print(f"🚀 PHASE TRANSITION: Phase {old_phase} → Phase {self.current_phase}")
-            print(f"{'🔄'*20}")
+        # Check for mode transition
+        if old_mode != self.current_mode and not self.mode_switched:
+            self.mode_switched = True
+            print(f"\n{'🔄'*30}")
+            print(f"🚀 MODE TRANSITION at Day {days_elapsed:.1f}")
+            print(f"   🔥 AGGRESSIVE → 🛡️ CONSERVATIVE")
+            print(f"   Enabling: Trend Filter, Dynamic R:R, Partial TP")
+            print(f"{'🔄'*30}\n")
         
-        if self.current_phase == 1:
-            # AGGRESSIVE MODE
-            self.max_age_bars = self.phase1_max_age
-            self.tp_rr_mult = self.phase1_rr
-            self.sl_atr_buffer = self.phase1_sl_buffer
+        if self.current_mode == 'aggressive':
+            # V1 AGGRESSIVE MODE
+            self.max_age_bars = self.aggressive_max_age
+            self.tp_rr_mult = self.aggressive_rr
+            self.sl_atr_buffer = self.aggressive_sl_buffer
             self.use_trend_filter = False
             self.use_partial_tp = False
             self.use_dynamic_rr = False
             
-        elif self.current_phase == 2:
-            # TRANSITION MODE
-            self.max_age_bars = self.phase2_max_age
-            self.tp_rr_mult = self.phase2_rr
-            self.sl_atr_buffer = self.phase2_sl_buffer
-            self.use_trend_filter = self.phase2_soft_trend  # Soft filter
-            self.use_partial_tp = False
-            self.use_dynamic_rr = True
-            
-        else:  # Phase 3
-            # CONSERVATIVE MODE
-            self.max_age_bars = self.phase3_max_age
-            self.sl_atr_buffer = self.phase3_sl_buffer
+        else:  # conservative
+            # V2 CONSERVATIVE MODE
+            self.max_age_bars = self.conservative_max_age
+            self.sl_atr_buffer = self.conservative_sl_buffer
             self.use_trend_filter = True
             self.use_partial_tp = True
             self.use_dynamic_rr = True
     
     def on_init(self, df: pd.DataFrame):
-        """Initialize with phase-aware settings"""
-        # Call parent init
+        """Initialize with time-based settings"""
         super().on_init(df)
         
-        # Reset counters
-        self.total_trades = 0
-        self.current_phase = 1
-        self._update_phase_settings()
+        # Record start bar index
+        self.start_bar_index = 0
+        self.current_mode = 'aggressive'
+        self.mode_switched = False
         
         print(f"\n{'='*60}")
-        print(f"🚀 PREMIUM V3 ADAPTIVE STRATEGY INITIALIZED")
+        print(f"🚀 PREMIUM V3 TIME-BASED STRATEGY INITIALIZED")
         print(f"{'='*60}")
-        print(f"📊 PHASE SYSTEM:")
-        print(f"   Phase 1 (Trades 1-{self.phase1_trades}):  AGGRESSIVE")
-        print(f"      • No trend filter")
-        print(f"      • R:R Target: {self.phase1_rr}:1")
-        print(f"      • OB Max Age: {self.phase1_max_age} bars")
-        print(f"      • SL Buffer: {self.phase1_sl_buffer}x ATR")
+        print(f"⏱️ TIME-BASED MODE SWITCHING:")
+        print(f"   Timeframe: {self.timeframe_minutes}m ({self.bars_per_day} bars/day)")
+        print(f"   Switch at: Day {self.aggressive_days} ({self.aggressive_bars} bars)")
         print(f"")
-        print(f"   Phase 2 (Trades {self.phase1_trades+1}-{self.phase2_trades}): TRANSITION")
-        print(f"      • Soft trend filter")
-        print(f"      • R:R Target: {self.phase2_rr}:1 (dynamic)")
-        print(f"      • OB Max Age: {self.phase2_max_age} bars")
-        print(f"      • SL Buffer: {self.phase2_sl_buffer}x ATR")
+        print(f"🔥 AGGRESSIVE MODE (Days 1-{self.aggressive_days}):")
+        print(f"   • Trend Filter: OFF")
+        print(f"   • R:R Target: {self.aggressive_rr}:1 (fixed)")
+        print(f"   • Partial TP: OFF")
+        print(f"   • OB Max Age: {self.aggressive_max_age} bars")
+        print(f"   • SL Buffer: {self.aggressive_sl_buffer}x ATR")
         print(f"")
-        print(f"   Phase 3 (Trades {self.phase2_trades+1}+): CONSERVATIVE")
-        print(f"      • Full trend filter (EMA{self.ema_fast}/EMA{self.ema_slow})")
-        print(f"      • Dynamic R:R (1.5-2.5x based on volatility)")
-        print(f"      • Partial TP: {int(self.partial_tp_percent*100)}% at {self.tp1_rr_mult}x")
-        print(f"      • OB Max Age: {self.phase3_max_age} bars")
-        print(f"      • SL Buffer: {self.phase3_sl_buffer}x ATR")
+        print(f"🛡️ CONSERVATIVE MODE (Days {self.aggressive_days+1}+):")
+        print(f"   • Trend Filter: ON (EMA{self.ema_fast}/EMA{self.ema_slow})")
+        print(f"   • R:R Target: Dynamic (1.5-2.5x)")
+        print(f"   • Partial TP: {int(self.partial_tp_percent*100)}% at {self.tp1_rr_mult}x")
+        print(f"   • OB Max Age: {self.conservative_max_age} bars")
+        print(f"   • SL Buffer: {self.conservative_sl_buffer}x ATR")
         print(f"{'='*60}\n")
     
     def _check_entries(self, df: pd.DataFrame, current, position) -> Dict:
-        """
-        Phase-aware entry checking
-        """
-        # Update phase settings before checking
-        self._update_phase_settings()
+        """Time-based mode entry checking"""
+        current_idx = len(df) - 1
+        
+        # Update mode settings based on time
+        self._update_mode_settings(current_idx)
         
         if PositionSide and position and position != PositionSide.FLAT:
             return {'signal': 'FLAT', 'sl': None, 'tp': None, 'size': 0.0}
         
-        current_idx = len(df) - 1
         atr = current.get('atr', current['close'] * 0.02)
+        days_elapsed = self._get_days_elapsed(current_idx)
         
         # Get current trend
         trend = self._get_current_trend(df)
         self.current_trend = trend
         
-        # Get R:R based on phase
-        if self.current_phase == 1:
-            dynamic_rr = self.phase1_rr
-        elif self.current_phase == 2:
-            dynamic_rr = self._get_dynamic_rr(df) if self.use_dynamic_rr else self.phase2_rr
+        # Get R:R based on mode
+        if self.current_mode == 'aggressive':
+            dynamic_rr = self.aggressive_rr
         else:
             dynamic_rr = self._get_dynamic_rr(df)
         
@@ -2188,15 +2179,11 @@ class OrderBlockStrategyPremiumV3(OrderBlockStrategyPremiumV2):
             
             ob_key = f"long_{ob.index}"
             
-            # Price taps OB zone
             if current['low'] <= ob.top and current['high'] > ob.bottom:
                 if ob_key not in self.active_poi:
-                    # PHASE-AWARE TREND FILTER
-                    if self.current_phase == 3 and self.use_trend_filter and trend == 'bearish':
-                        continue  # Block in Phase 3
-                    elif self.current_phase == 2 and self.phase2_soft_trend and trend == 'bearish':
-                        print(f"   ⚠️ SOFT WARNING: Counter-trend trade (Phase 2)")
-                        # Don't block, just warn
+                    # MODE-AWARE TREND FILTER
+                    if self.current_mode == 'conservative' and self.use_trend_filter and trend == 'bearish':
+                        continue  # Block in conservative mode
                     
                     self.active_poi[ob_key] = {
                         'ob': ob,
@@ -2205,9 +2192,9 @@ class OrderBlockStrategyPremiumV3(OrderBlockStrategyPremiumV2):
                         'tap_price': current['low'],
                         'waiting_mss': True
                     }
+                    mode_emoji = "🔥" if self.current_mode == 'aggressive' else "🛡️"
                     print(f"\n📍 POI ACTIVATED - Bullish OB tapped at ${current['low']:,.2f}")
-                    print(f"   📈 Trend: {trend.upper()} | Phase: {self.current_phase} | R:R: {dynamic_rr}:1")
-                    print(f"   Waiting for MSS confirmation...")
+                    print(f"   {mode_emoji} Mode: {self.current_mode.upper()} | Day {days_elapsed:.1f} | R:R: {dynamic_rr}:1")
         
         # Check bearish OBs for tap
         for ob in self.short_obs:
@@ -2216,14 +2203,11 @@ class OrderBlockStrategyPremiumV3(OrderBlockStrategyPremiumV2):
             
             ob_key = f"short_{ob.index}"
             
-            # Price taps OB zone
             if current['high'] >= ob.bottom and current['low'] < ob.top:
                 if ob_key not in self.active_poi:
-                    # PHASE-AWARE TREND FILTER
-                    if self.current_phase == 3 and self.use_trend_filter and trend == 'bullish':
-                        continue  # Block in Phase 3
-                    elif self.current_phase == 2 and self.phase2_soft_trend and trend == 'bullish':
-                        print(f"   ⚠️ SOFT WARNING: Counter-trend trade (Phase 2)")
+                    # MODE-AWARE TREND FILTER
+                    if self.current_mode == 'conservative' and self.use_trend_filter and trend == 'bullish':
+                        continue  # Block in conservative mode
                     
                     self.active_poi[ob_key] = {
                         'ob': ob,
@@ -2232,9 +2216,9 @@ class OrderBlockStrategyPremiumV3(OrderBlockStrategyPremiumV2):
                         'tap_price': current['high'],
                         'waiting_mss': True
                     }
+                    mode_emoji = "🔥" if self.current_mode == 'aggressive' else "🛡️"
                     print(f"\n📍 POI ACTIVATED - Bearish OB tapped at ${current['high']:,.2f}")
-                    print(f"   📉 Trend: {trend.upper()} | Phase: {self.current_phase} | R:R: {dynamic_rr}:1")
-                    print(f"   Waiting for MSS confirmation...")
+                    print(f"   {mode_emoji} Mode: {self.current_mode.upper()} | Day {days_elapsed:.1f} | R:R: {dynamic_rr}:1")
         
         # =====================================================================
         # STEP 2: Check active POIs for MSS confirmation
@@ -2250,40 +2234,32 @@ class OrderBlockStrategyPremiumV3(OrderBlockStrategyPremiumV2):
             ob = poi['ob']
             bars_since_tap = current_idx - poi['tap_index']
             
-            # Check if POI expired
             if bars_since_tap > self.mss_confirmation_bars:
                 expired_pois.append(poi_key)
-                print(f"\n⏰ POI EXPIRED - No MSS within {self.mss_confirmation_bars} bars")
                 continue
             
-            # RE-CHECK TREND (only block in Phase 3)
-            if self.current_phase == 3 and self.use_trend_filter:
+            # RE-CHECK TREND (only in conservative mode)
+            if self.current_mode == 'conservative' and self.use_trend_filter:
                 if direction == 'bullish' and trend == 'bearish':
                     expired_pois.append(poi_key)
-                    print(f"\n❌ POI INVALIDATED - Trend shifted to bearish (Phase 3)")
                     continue
                 elif direction == 'bearish' and trend == 'bullish':
                     expired_pois.append(poi_key)
-                    print(f"\n❌ POI INVALIDATED - Trend shifted to bullish (Phase 3)")
                     continue
             
-            # Check for MSS confirmation
             mss_confirmed, base_sl = self._detect_entry_mss(df, current_idx, poi, direction)
             
             if mss_confirmed:
                 entry_price = current['close']
-                
-                # Phase-aware SL buffer
                 sl_price = self._get_sl_with_buffer(base_sl, direction, atr)
                 
                 if direction == 'bullish':
-                    # LONG entry
                     risk_distance = entry_price - sl_price
                     tp_price = entry_price + (risk_distance * dynamic_rr)
                     
-                    # Partial TP only in Phase 3
+                    # Partial TP only in conservative mode
                     tp1_price = None
-                    if self.current_phase == 3 and self.use_partial_tp:
+                    if self.current_mode == 'conservative' and self.use_partial_tp:
                         tp1_price = entry_price + (risk_distance * self.tp1_rr_mult)
                     
                     reward = tp_price - entry_price
@@ -2292,18 +2268,18 @@ class OrderBlockStrategyPremiumV3(OrderBlockStrategyPremiumV2):
                     if rr >= self.min_risk_reward:
                         expired_pois.append(poi_key)
                         self.total_trades += 1
-                        self.phase_stats[self.current_phase]['trades'] += 1
+                        self.mode_stats[self.current_mode]['trades'] += 1
                         
-                        phase_emoji = "🔥" if self.current_phase == 1 else "⚡" if self.current_phase == 2 else "🛡️"
-                        phase_name = "AGGRESSIVE" if self.current_phase == 1 else "TRANSITION" if self.current_phase == 2 else "CONSERVATIVE"
+                        mode_emoji = "🔥" if self.current_mode == 'aggressive' else "🛡️"
+                        mode_name = "AGGRESSIVE (V1)" if self.current_mode == 'aggressive' else "CONSERVATIVE (V2)"
                         
                         print(f"\n✅ {'='*60}")
-                        print(f"🟢 PREMIUM V3 - LONG ENTRY [{phase_emoji} PHASE {self.current_phase}: {phase_name}]")
+                        print(f"🟢 PREMIUM V3 - LONG ENTRY [{mode_emoji} {mode_name}]")
                         print(f"{'='*60}")
-                        print(f"📊 Trade #{self.total_trades} | Phase {self.current_phase}")
+                        print(f"📊 Trade #{self.total_trades} | Day {days_elapsed:.1f}")
                         print(f"📈 Trend: {trend.upper()}")
                         print(f"📍 Entry:     ${entry_price:,.2f}")
-                        print(f"🛑 Stop Loss: ${sl_price:,.2f} ({self.sl_atr_buffer}x ATR buffer)")
+                        print(f"🛑 Stop Loss: ${sl_price:,.2f} ({self.sl_atr_buffer}x ATR)")
                         if tp1_price:
                             print(f"🎯 TP1:       ${tp1_price:,.2f} ({self.tp1_rr_mult}x)")
                             print(f"🎯 TP2:       ${tp_price:,.2f} ({dynamic_rr}x)")
@@ -2320,20 +2296,19 @@ class OrderBlockStrategyPremiumV3(OrderBlockStrategyPremiumV2):
                             'size': self.position_size,
                             'ob_index': ob.index,
                             'ob_type': 'bullish',
-                            'entry_type': f'premium_v3_phase{self.current_phase}',
+                            'entry_type': f'premium_v3_{self.current_mode}',
                             'trend': trend,
-                            'phase': self.current_phase,
+                            'mode': self.current_mode,
+                            'day': days_elapsed,
                             'dynamic_rr': dynamic_rr
                         }
                 
                 else:  # bearish
-                    # SHORT entry
                     risk_distance = sl_price - entry_price
                     tp_price = entry_price - (risk_distance * dynamic_rr)
                     
-                    # Partial TP only in Phase 3
                     tp1_price = None
-                    if self.current_phase == 3 and self.use_partial_tp:
+                    if self.current_mode == 'conservative' and self.use_partial_tp:
                         tp1_price = entry_price - (risk_distance * self.tp1_rr_mult)
                     
                     reward = entry_price - tp_price
@@ -2342,18 +2317,18 @@ class OrderBlockStrategyPremiumV3(OrderBlockStrategyPremiumV2):
                     if rr >= self.min_risk_reward:
                         expired_pois.append(poi_key)
                         self.total_trades += 1
-                        self.phase_stats[self.current_phase]['trades'] += 1
+                        self.mode_stats[self.current_mode]['trades'] += 1
                         
-                        phase_emoji = "🔥" if self.current_phase == 1 else "⚡" if self.current_phase == 2 else "🛡️"
-                        phase_name = "AGGRESSIVE" if self.current_phase == 1 else "TRANSITION" if self.current_phase == 2 else "CONSERVATIVE"
+                        mode_emoji = "🔥" if self.current_mode == 'aggressive' else "🛡️"
+                        mode_name = "AGGRESSIVE (V1)" if self.current_mode == 'aggressive' else "CONSERVATIVE (V2)"
                         
                         print(f"\n✅ {'='*60}")
-                        print(f"🔴 PREMIUM V3 - SHORT ENTRY [{phase_emoji} PHASE {self.current_phase}: {phase_name}]")
+                        print(f"🔴 PREMIUM V3 - SHORT ENTRY [{mode_emoji} {mode_name}]")
                         print(f"{'='*60}")
-                        print(f"📊 Trade #{self.total_trades} | Phase {self.current_phase}")
+                        print(f"📊 Trade #{self.total_trades} | Day {days_elapsed:.1f}")
                         print(f"📉 Trend: {trend.upper()}")
                         print(f"📍 Entry:     ${entry_price:,.2f}")
-                        print(f"🛑 Stop Loss: ${sl_price:,.2f} ({self.sl_atr_buffer}x ATR buffer)")
+                        print(f"🛑 Stop Loss: ${sl_price:,.2f} ({self.sl_atr_buffer}x ATR)")
                         if tp1_price:
                             print(f"🎯 TP1:       ${tp1_price:,.2f} ({self.tp1_rr_mult}x)")
                             print(f"🎯 TP2:       ${tp_price:,.2f} ({dynamic_rr}x)")
@@ -2370,28 +2345,28 @@ class OrderBlockStrategyPremiumV3(OrderBlockStrategyPremiumV2):
                             'size': self.position_size,
                             'ob_index': ob.index,
                             'ob_type': 'bearish',
-                            'entry_type': f'premium_v3_phase{self.current_phase}',
+                            'entry_type': f'premium_v3_{self.current_mode}',
                             'trend': trend,
-                            'phase': self.current_phase,
+                            'mode': self.current_mode,
+                            'day': days_elapsed,
                             'dynamic_rr': dynamic_rr
                         }
         
-        # Clean up expired POIs
         for poi_key in expired_pois:
             del self.active_poi[poi_key]
         
         return {'signal': 'FLAT', 'sl': None, 'tp': None, 'size': 0.0}
     
     def get_stats(self) -> Dict:
-        """Get V3 strategy statistics with phase breakdown"""
+        """Get V3 strategy statistics with mode breakdown"""
         base_stats = super().get_stats()
         base_stats.update({
-            'version': 'V3',
+            'version': 'V3_TimeBased',
             'total_trades': self.total_trades,
-            'current_phase': self.current_phase,
-            'phase_stats': self.phase_stats,
-            'phase1_trades_threshold': self.phase1_trades,
-            'phase2_trades_threshold': self.phase2_trades
+            'current_mode': self.current_mode,
+            'mode_stats': self.mode_stats,
+            'aggressive_days': self.aggressive_days,
+            'mode_switched': self.mode_switched
         })
         return base_stats
 
