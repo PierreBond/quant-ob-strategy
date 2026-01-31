@@ -85,35 +85,234 @@ TELEGRAM_CHAT_ID = "your_chat_id_here"
 
 ## Usage
 
-### Backtesting
+### Command Line Options
 
 ```bash
-# Basic backtest with sample data
-python main.py --mode backtest --days 30
-
-# Backtest with custom capital
-python main.py --mode backtest --days 60 --capital 5000
-
-# Test different strategies
-python main.py --mode backtest --strategy sma --days 30
+python main.py --help
 ```
 
-### Live Trading
+| Argument | Options | Default | Description |
+|----------|---------|---------|-------------|
+| `--mode` | `backtest`, `live`, `optimize` | `backtest` | Operating mode |
+| `--strategy` | See strategies table | `orderblock_premium` | Trading strategy |
+| `--days` | 1-365+ | 30 | Backtest period (days from today) |
+| `--capital` | Any positive number | 10000 | Starting capital ($) |
+| `--timeframe` | `1m`, `5m`, `15m`, `1h`, `4h`, `1d` | `15m` | Candle timeframe |
+| `--symbol` | e.g. `BTC/USDT` | `BTC/USDT` | Trading pair |
+| `--exchange` | `binance`, `bybit`, `okx`, `kucoin`, `coinbase`, `kraken` | `binance` | Exchange |
+| `--real-data` | flag | False | Use real market data (recommended) |
+| `--live` | flag | False | Enable real trading (requires API keys) |
+
+---
+
+## 📊 Available Strategies
+
+| Strategy | Command Value | Description | Best For |
+|----------|--------------|-------------|----------|
+| **Premium V1** | `orderblock_premium` | Aggressive, FVG+displacement, 3:1 R:R | ≤30 days |
+| **Premium V2** | `orderblock_premium_v2` | Conservative, trend filter, dynamic R:R, partial TP | 90-180 days |
+| **Premium V3** | `orderblock_premium_v3` | Hybrid: V1 for first 30d, then V2 | 60-120 days |
+| **Basic** | `orderblock` | Simple order block strategy | Testing |
+| **All OBs** | `orderblock_all` | Trades all order blocks | Testing |
+| **Inverse** | `orderblock_inverse` | Opposite signals | Testing |
+
+### Strategy Performance Summary (BTC/USDT 15m)
+
+| Period | V1 Return | V2 Return | V3 Return | 🏆 Best |
+|--------|-----------|-----------|-----------|---------|
+| 30 days | **+3.01%** | +1.67% | +2.98% | V1 |
+| 60 days | +3.37% | +5.32% | **+5.61%** | V3 |
+| 90 days | +14.34% | +15.86% | **+17.41%** | V3 |
+| 180 days | +4.73% | **+12.16%** | +11.98% | V2 |
+| 240 days | -3.53% | **+6.59%** | +5.77% | V2 |
+| 365 days | -21.11% | **-10.40%** | -14.17% | V2 |
+
+---
+
+## 🧪 Backtesting Commands
+
+### Basic Backtest
+```bash
+# Default: 30 days, Premium V1, BTC/USDT, 15m
+python main.py --mode backtest --real-data
+```
+
+### Premium V1 (Aggressive) - Best for ≤30 days
+```bash
+# 30-day backtest
+python main.py --mode backtest --days 30 --strategy orderblock_premium --real-data --exchange binance --timeframe 15m --symbol BTC/USDT
+
+# 90-day backtest (peak performance ~+14%)
+python main.py --mode backtest --days 90 --strategy orderblock_premium --real-data --exchange binance --timeframe 15m --symbol BTC/USDT
+```
+
+### Premium V2 (Conservative) - Best for 90-180 days
+```bash
+# 90-day backtest (~+16% return, 56% win rate)
+python main.py --mode backtest --days 90 --strategy orderblock_premium_v2 --real-data --exchange binance --timeframe 15m --symbol BTC/USDT
+
+# 180-day backtest (~+12% return)
+python main.py --mode backtest --days 180 --strategy orderblock_premium_v2 --real-data --exchange binance --timeframe 15m --symbol BTC/USDT
+
+# 365-day backtest (shows strategy degradation)
+python main.py --mode backtest --days 365 --strategy orderblock_premium_v2 --real-data --exchange binance --timeframe 15m --symbol BTC/USDT
+```
+
+### Premium V3 (Hybrid) - Best for 60-120 days
+```bash
+# 90-day backtest (best overall: +17.41%, PF 2.02)
+python main.py --mode backtest --days 90 --strategy orderblock_premium_v3 --real-data --exchange binance --timeframe 15m --symbol BTC/USDT
+
+# 120-day backtest
+python main.py --mode backtest --days 120 --strategy orderblock_premium_v3 --real-data --exchange binance --timeframe 15m --symbol BTC/USDT
+```
+
+### Different Timeframes (⚠️ Not Recommended)
+```bash
+# 5-minute timeframe (too noisy, loses money)
+python main.py --mode backtest --days 90 --strategy orderblock_premium_v2 --real-data --timeframe 5m --symbol BTC/USDT
+
+# 1-hour timeframe (too slow, loses money)
+python main.py --mode backtest --days 90 --strategy orderblock_premium_v2 --real-data --timeframe 1h --symbol BTC/USDT
+```
+
+### Different Exchanges
+```bash
+# Bybit
+python main.py --mode backtest --days 90 --strategy orderblock_premium_v2 --real-data --exchange bybit --timeframe 15m --symbol BTC/USDT
+
+# OKX
+python main.py --mode backtest --days 90 --strategy orderblock_premium_v2 --real-data --exchange okx --timeframe 15m --symbol BTC/USDT
+
+# Kraken
+python main.py --mode backtest --days 90 --strategy orderblock_premium_v2 --real-data --exchange kraken --timeframe 15m --symbol BTC/USDT
+```
+
+### Custom Capital
+```bash
+# Start with $5,000
+python main.py --mode backtest --days 90 --strategy orderblock_premium_v2 --real-data --capital 5000
+
+# Start with $50,000
+python main.py --mode backtest --days 90 --strategy orderblock_premium_v2 --real-data --capital 50000
+```
+
+### Batch Testing (PowerShell)
+```powershell
+# Test all periods at once
+@(30, 60, 90, 180, 365) | ForEach-Object { 
+    Write-Host "===== $_ DAYS ====="; 
+    python main.py --mode backtest --days $_ --strategy orderblock_premium_v2 --real-data 
+}
+```
+
+---
+
+## 🚀 Live Trading Commands
+
+### Paper Trading (No Real Money)
+```bash
+# Paper trade with V3 (recommended)
+python main.py --mode live --strategy orderblock_premium_v3 --exchange binance --timeframe 15m --symbol BTC/USDT
+
+# Paper trade with V2
+python main.py --mode live --strategy orderblock_premium_v2 --exchange binance --timeframe 15m --symbol BTC/USDT
+```
+
+### Real Trading (Requires API Keys)
+```bash
+# ⚠️ REAL MONEY - Use with caution!
+python main.py --mode live --live --strategy orderblock_premium_v2 --exchange binance --timeframe 15m --symbol BTC/USDT
+```
+
+### Live Trading Setup Checklist
+1. ✅ Configure API keys in `config/settings.py`
+2. ✅ Set `PAPER_TRADING = False` for real trading
+3. ✅ Set `TESTNET = False` for mainnet
+4. ✅ Enable IP whitelist on exchange
+5. ✅ Start with small capital to test
+
+---
+
+## 📈 Parameter Optimization
 
 ```bash
-# Paper trading (recommended for testing)
-python main.py --mode live --paper
+# Find best parameters for V2
+python main.py --mode optimize --days 90 --strategy orderblock_premium_v2
 
-# Live trading (requires API keys)
-python main.py --mode live
+# Optimize with custom capital
+python main.py --mode optimize --days 60 --capital 5000
 ```
 
-### Parameter Optimization
+---
 
+## 📱 Telegram Notifications
+
+Enable Telegram alerts in `config/settings.py`:
+
+```python
+TELEGRAM_ENABLED = True
+TELEGRAM_BOT_TOKEN = "your_bot_token_here"
+TELEGRAM_CHAT_ID = "your_chat_id_here"
+```
+
+Notifications include:
+- 🟢 Trade entry signals
+- 🔴 Trade exit signals
+- 💰 Profit/loss updates
+- ⚠️ Drawdown warnings
+
+---
+
+## ⚡ Quick Start Examples
+
+### Beginner: Test the Strategy
 ```bash
-# Find best parameters
-python main.py --mode optimize --days 30
+# 1. Run a 30-day backtest to see how it works
+python main.py --mode backtest --days 30 --strategy orderblock_premium_v2 --real-data
+
+# 2. View results in results/ folder
 ```
+
+### Intermediate: Compare Strategies
+```bash
+# Compare V1, V2, V3 over 90 days
+python main.py --mode backtest --days 90 --strategy orderblock_premium --real-data
+python main.py --mode backtest --days 90 --strategy orderblock_premium_v2 --real-data
+python main.py --mode backtest --days 90 --strategy orderblock_premium_v3 --real-data
+```
+
+### Advanced: Start Paper Trading
+```bash
+# Paper trade with best strategy (V3 for ~90 days)
+python main.py --mode live --strategy orderblock_premium_v3 --exchange binance --timeframe 15m --symbol BTC/USDT
+```
+
+---
+
+## 📋 Output Files
+
+All backtest results are saved to:
+
+| File | Location | Contents |
+|------|----------|----------|
+| Trade log | `results/trades_YYYYMMDD_HHMMSS.csv` | All trades with entry/exit prices |
+| Summary | `results/backtest_YYYYMMDD_HHMMSS.json` | Performance metrics |
+| Chart | `charts/backtest_YYYYMMDD_HHMMSS.png` | Equity curve visualization |
+| Strategy summary | `results/premium_strategy_summary.json` | All strategy comparisons |
+
+---
+
+## ⚠️ Important Recommendations
+
+| Rule | Explanation |
+|------|-------------|
+| **Only use 15m timeframe** | 5m too noisy, 1h too slow |
+| **Only trade BTC/USDT** | Strategy fails on ETH, Gold |
+| **Reset every 90-120 days** | Strategy degrades over time |
+| **Use V3 for 60-120 days** | Best overall returns |
+| **Use V2 for 120+ days** | Most conservative |
+| **Never run 365 days straight** | All strategies lose money |
 
 ## Strategy Parameters
 

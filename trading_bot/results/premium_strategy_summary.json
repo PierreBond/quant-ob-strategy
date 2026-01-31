@@ -1,0 +1,447 @@
+{
+  "generated_at": "2026-01-31",
+  "symbol": "BTC/USDT",
+  "exchange": "binance",
+  "initial_capital": 10000,
+  "strategies": {
+    "premium_v1": {
+      "name": "OrderBlock Premium V1 (Aggressive)",
+      "description": "Original premium strategy with FVG+displacement, 3:1 R:R, 500 bar OB age",
+      "optimal_period": "30-90 days",
+      "timeframes": {
+        "15m": {
+          "periods": {
+            "30_days": {
+              "total_trades": 14,
+              "win_rate": 42.9,
+              "winning_trades": 6,
+              "losing_trades": 8,
+              "total_return": 3.01,
+              "final_capital": 10301.24,
+              "profit_factor": 2.45,
+              "max_drawdown": 1.69
+            },
+            "60_days": {
+              "total_trades": 34,
+              "win_rate": 44.1,
+              "winning_trades": 15,
+              "losing_trades": 19,
+              "total_return": 3.37,
+              "final_capital": 10337.29,
+              "profit_factor": 1.54,
+              "max_drawdown": 4.52
+            },
+            "90_days": {
+              "total_trades": 70,
+              "win_rate": 44.3,
+              "winning_trades": 31,
+              "losing_trades": 39,
+              "total_return": 14.34,
+              "final_capital": 11433.92,
+              "profit_factor": 1.79,
+              "max_drawdown": 4.49
+            },
+            "180_days": {
+              "total_trades": 121,
+              "win_rate": 39.7,
+              "winning_trades": 48,
+              "losing_trades": 73,
+              "total_return": 4.73,
+              "final_capital": 10473.43,
+              "profit_factor": 1.29,
+              "max_drawdown": 10.21
+            },
+            "240_days": {
+              "total_trades": 159,
+              "win_rate": 35.8,
+              "winning_trades": 57,
+              "losing_trades": 102,
+              "total_return": -3.53,
+              "final_capital": 9647.09,
+              "profit_factor": 1.08,
+              "max_drawdown": 16.96
+            },
+            "365_days": {
+              "total_trades": 263,
+              "win_rate": 31.6,
+              "winning_trades": 83,
+              "losing_trades": 180,
+              "total_return": -21.11,
+              "final_capital": 7889.01,
+              "profit_factor": 0.87,
+              "max_drawdown": 35.74
+            }
+          }
+        }
+      }
+    },
+    "premium_v2": {
+      "name": "OrderBlock Premium V2 (Conservative)",
+      "description": "Enhanced with trend filter (EMA50/200), dynamic R:R, partial TP, 150 bar OB age",
+      "optimal_period": "90-180 days",
+      "timeframes": {
+        "5m": {
+          "periods": {
+            "7_days": {
+              "total_trades": 3,
+              "win_rate": 33.3,
+              "winning_trades": 1,
+              "losing_trades": 2,
+              "total_return": 0.17,
+              "final_capital": 10016.67,
+              "profit_factor": 1.38,
+              "max_drawdown": 1.76
+            },
+            "14_days": {
+              "total_trades": 6,
+              "win_rate": 66.7,
+              "winning_trades": 4,
+              "losing_trades": 2,
+              "total_return": 3.77,
+              "final_capital": 10377.05,
+              "profit_factor": 5.66,
+              "max_drawdown": 1.45
+            },
+            "30_days": {
+              "total_trades": 15,
+              "win_rate": 33.3,
+              "winning_trades": 5,
+              "losing_trades": 10,
+              "total_return": -1.72,
+              "final_capital": 9828.29,
+              "profit_factor": 0.85,
+              "max_drawdown": 6.79
+            },
+            "60_days": {
+              "total_trades": 40,
+              "win_rate": 42.5,
+              "winning_trades": 17,
+              "losing_trades": 23,
+              "total_return": -4.54,
+              "final_capital": 9545.56,
+              "profit_factor": 0.85,
+              "max_drawdown": 10.86
+            },
+            "90_days": {
+              "total_trades": 90,
+              "win_rate": 41.1,
+              "winning_trades": 37,
+              "losing_trades": 53,
+              "total_return": -7.81,
+              "final_capital": 9218.95,
+              "profit_factor": 0.91,
+              "max_drawdown": 14.60
+            }
+          },
+          "recommendation": "NOT_RECOMMENDED"
+        },
+        "15m": {
+          "periods": {
+            "30_days": {
+              "total_trades": 12,
+              "win_rate": 50.0,
+              "winning_trades": 6,
+              "losing_trades": 6,
+              "total_return": 1.67,
+              "final_capital": 10167.18,
+              "profit_factor": 1.61,
+              "max_drawdown": 2.81
+            },
+            "60_days": {
+              "total_trades": 26,
+              "win_rate": 57.7,
+              "winning_trades": 15,
+              "losing_trades": 11,
+              "total_return": 5.32,
+              "final_capital": 10531.50,
+              "profit_factor": 1.80,
+              "max_drawdown": 2.81
+            },
+            "90_days": {
+              "total_trades": 55,
+              "win_rate": 56.4,
+              "winning_trades": 31,
+              "losing_trades": 24,
+              "total_return": 15.86,
+              "final_capital": 11586.32,
+              "profit_factor": 1.97,
+              "max_drawdown": 3.73
+            },
+            "180_days": {
+              "total_trades": 93,
+              "win_rate": 51.6,
+              "winning_trades": 48,
+              "losing_trades": 45,
+              "total_return": 12.16,
+              "final_capital": 11216.40,
+              "profit_factor": 1.48,
+              "max_drawdown": 8.29
+            },
+            "240_days": {
+              "total_trades": 117,
+              "win_rate": 48.7,
+              "winning_trades": 57,
+              "losing_trades": 60,
+              "total_return": 6.59,
+              "final_capital": 10658.53,
+              "profit_factor": 1.28,
+              "max_drawdown": 10.58
+            },
+            "365_days": {
+              "total_trades": 195,
+              "win_rate": 44.6,
+              "winning_trades": 87,
+              "losing_trades": 108,
+              "total_return": -10.40,
+              "final_capital": 8959.67,
+              "profit_factor": 0.98,
+              "max_drawdown": 28.43
+            }
+          },
+          "recommendation": "OPTIMAL"
+        },
+        "1h": {
+          "periods": {
+            "7_days": {
+              "total_trades": 0,
+              "win_rate": 0.0,
+              "winning_trades": 0,
+              "losing_trades": 0,
+              "total_return": 0.0,
+              "final_capital": 10000.00,
+              "profit_factor": 0.0,
+              "max_drawdown": 0.0
+            },
+            "14_days": {
+              "total_trades": 1,
+              "win_rate": 0.0,
+              "winning_trades": 0,
+              "losing_trades": 1,
+              "total_return": -1.14,
+              "final_capital": 9885.95,
+              "profit_factor": 0.0,
+              "max_drawdown": 1.50
+            },
+            "30_days": {
+              "total_trades": 2,
+              "win_rate": 0.0,
+              "winning_trades": 0,
+              "losing_trades": 2,
+              "total_return": -3.47,
+              "final_capital": 9653.00,
+              "profit_factor": 0.0,
+              "max_drawdown": 4.35
+            },
+            "60_days": {
+              "total_trades": 8,
+              "win_rate": 25.0,
+              "winning_trades": 2,
+              "losing_trades": 6,
+              "total_return": -5.50,
+              "final_capital": 9449.68,
+              "profit_factor": 0.30,
+              "max_drawdown": 5.50
+            },
+            "90_days": {
+              "total_trades": 15,
+              "win_rate": 26.7,
+              "winning_trades": 4,
+              "losing_trades": 11,
+              "total_return": -5.43,
+              "final_capital": 9457.14,
+              "profit_factor": 0.60,
+              "max_drawdown": 7.81
+            },
+            "180_days": {
+              "total_trades": 24,
+              "win_rate": 33.3,
+              "winning_trades": 8,
+              "losing_trades": 16,
+              "total_return": -6.78,
+              "final_capital": 9322.12,
+              "profit_factor": 0.71,
+              "max_drawdown": 7.81
+            },
+            "365_days": {
+              "total_trades": 66,
+              "win_rate": 27.3,
+              "winning_trades": 18,
+              "losing_trades": 48,
+              "total_return": -25.71,
+              "final_capital": 7428.88,
+              "profit_factor": 0.52,
+              "max_drawdown": 27.38
+            }
+          },
+          "recommendation": "NOT_RECOMMENDED"
+        }
+      }
+    },
+    "premium_v3": {
+      "name": "OrderBlock Premium V3 (Time-Based Hybrid)",
+      "description": "Adaptive strategy: Aggressive (V1 style) for first 30 days, then Conservative (V2 style) for 30+ days",
+      "optimal_period": "60-120 days",
+      "mode_switching": {
+        "aggressive_days": 30,
+        "aggressive_mode": {
+          "trend_filter": false,
+          "reward_risk_ratio": 3.0,
+          "max_ob_age_bars": 500,
+          "partial_tp": false
+        },
+        "conservative_mode": {
+          "trend_filter": true,
+          "reward_risk_ratio": "dynamic (2.0-4.0)",
+          "max_ob_age_bars": 150,
+          "partial_tp": true
+        }
+      },
+      "timeframes": {
+        "15m": {
+          "periods": {
+            "30_days": {
+              "total_trades": 11,
+              "win_rate": 45.5,
+              "winning_trades": 5,
+              "losing_trades": 6,
+              "total_return": 2.98,
+              "final_capital": 10298.01,
+              "profit_factor": 2.03,
+              "max_drawdown": 2.53
+            },
+            "60_days": {
+              "total_trades": 26,
+              "win_rate": 53.8,
+              "winning_trades": 14,
+              "losing_trades": 12,
+              "total_return": 5.61,
+              "final_capital": 10560.98,
+              "profit_factor": 1.79,
+              "max_drawdown": 3.26
+            },
+            "90_days": {
+              "total_trades": 56,
+              "win_rate": 55.4,
+              "winning_trades": 31,
+              "losing_trades": 25,
+              "total_return": 17.41,
+              "final_capital": 11740.77,
+              "profit_factor": 2.02,
+              "max_drawdown": 4.00
+            },
+            "180_days": {
+              "total_trades": 95,
+              "win_rate": 50.5,
+              "winning_trades": 48,
+              "losing_trades": 47,
+              "total_return": 11.98,
+              "final_capital": 11197.83,
+              "profit_factor": 1.47,
+              "max_drawdown": 8.29
+            },
+            "240_days": {
+              "total_trades": 118,
+              "win_rate": 48.3,
+              "winning_trades": 57,
+              "losing_trades": 61,
+              "total_return": 5.77,
+              "final_capital": 10576.91,
+              "profit_factor": 1.26,
+              "max_drawdown": 11.36
+            },
+            "365_days": {
+              "total_trades": 194,
+              "win_rate": 43.3,
+              "winning_trades": 84,
+              "losing_trades": 110,
+              "total_return": -14.17,
+              "final_capital": 8582.52,
+              "profit_factor": 0.92,
+              "max_drawdown": 29.69
+            }
+          },
+          "recommendation": "OPTIMAL"
+        }
+      }
+    }
+  },
+  "comparison": {
+    "best_by_period": {
+      "30_days": {
+        "winner": "V1",
+        "return": 3.01
+      },
+      "60_days": {
+        "winner": "V3",
+        "return": 5.61
+      },
+      "90_days": {
+        "winner": "V3",
+        "return": 17.41
+      },
+      "180_days": {
+        "winner": "V2",
+        "return": 12.16
+      },
+      "240_days": {
+        "winner": "V2",
+        "return": 6.59
+      },
+      "365_days": {
+        "winner": "V2",
+        "return": -10.40
+      }
+    },
+    "best_win_rate": {
+      "strategy": "V2",
+      "timeframe": "15m",
+      "period": "60_days",
+      "win_rate": 57.7
+    },
+    "best_profit_factor": {
+      "strategy": "V1",
+      "timeframe": "15m",
+      "period": "30_days",
+      "profit_factor": 2.45
+    },
+    "lowest_drawdown": {
+      "strategy": "V1",
+      "timeframe": "15m",
+      "period": "30_days",
+      "max_drawdown": 1.69
+    },
+    "highest_return": {
+      "strategy": "V3",
+      "timeframe": "15m",
+      "period": "90_days",
+      "return": 17.41
+    }
+  },
+  "recommendations": {
+    "timeframe": "15m",
+    "by_trading_duration": {
+      "short_term_30_days_or_less": {
+        "strategy": "premium_v1",
+        "expected_return": "2-3%",
+        "max_drawdown": "1-2%"
+      },
+      "medium_term_31_to_120_days": {
+        "strategy": "premium_v3",
+        "expected_return": "5-17%",
+        "max_drawdown": "3-4%"
+      },
+      "long_term_121_to_240_days": {
+        "strategy": "premium_v2",
+        "expected_return": "6-12%",
+        "max_drawdown": "8-11%"
+      },
+      "very_long_term_365_days_plus": {
+        "strategy": "none_recommended",
+        "reason": "All strategies show negative returns after ~240 days"
+      }
+    },
+    "optimal_reset_period": "90-120 days",
+    "avoid_timeframes": ["5m", "1h"],
+    "only_profitable_asset": "BTC/USDT"
+  }
+}
