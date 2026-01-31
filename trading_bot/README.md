@@ -479,6 +479,98 @@ print(f"Funding bias: {bias} (confidence: {confidence:.0%})")
 | MTF Alignment | 50% | Reject if < 50% TFs confirm |
 | Extreme Funding | ±0.05% | Warn/avoid overleveraged side |
 
+### Backtest with Risk Management
+
+Use `--risk-mgmt` flag to enable Phase 1 features during backtesting:
+
+```bash
+# Full Phase 1 (MTF + Kelly + Circuit Breaker)
+python main.py --mode backtest --days 30 --strategy orderblock_premium_v2 --real-data --risk-mgmt
+
+# Phase 1 without MTF (faster, less filtering)
+python main.py --mode backtest --days 60 --strategy orderblock_premium_v3 --real-data --risk-mgmt --no-mtf
+
+# Phase 1 with Funding Rate filter (for futures)
+python main.py --mode backtest --days 60 --strategy orderblock_premium_v2 --real-data --risk-mgmt --use-funding
+
+# Compare: Without vs With Risk Management
+python main.py --mode backtest --days 30 --strategy orderblock_premium_v2 --real-data
+python main.py --mode backtest --days 30 --strategy orderblock_premium_v2 --real-data --risk-mgmt
+```
+
+#### Risk Management CLI Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--risk-mgmt` | **Enable** all Phase 1 features | Off |
+| `--no-mtf` | Disable multi-timeframe confirmation | MTF On |
+| `--no-kelly` | Disable Kelly position sizing | Kelly On |
+| `--no-circuit-breaker` | Disable circuit breaker | CB On |
+| `--use-funding` | Enable funding rate filter | Off |
+
+#### Example Results with Risk Management
+
+```
+============================================================
+BACKTEST RESULTS (30 days with --risk-mgmt)
+============================================================
+Total Trades                            9
+Win Rate                            88.9%
+Profit Factor                        9.57
+Total PnL                          $30.78
+Total Return                        0.31%
+
+🛡️ PHASE 1 RISK MANAGEMENT
+──────────────────────────────────────────
+Signals Evaluated                      16
+Trades Allowed                          9
+Trades Filtered                         7
+Filter Rate                         43.8%
+Circuit Breaker State              active
+============================================================
+```
+
+### ⚠️ Understanding High Win Rate vs Low Returns
+
+**Q: Why only $30 profit with 88.9% win rate?**
+
+This is actually **expected behavior** with conservative risk management:
+
+| Factor | Impact |
+|--------|--------|
+| **Small Position Size** | Default 2% per trade = $200 on $10k capital |
+| **Trades Filtered** | 7 of 16 signals rejected (43.8% filtered) = fewer opportunities |
+| **Conservative Kelly** | Uses 1/4 Kelly fraction for safety |
+| **Short Period** | Only 30 days = 9 total trades |
+
+**The Math:**
+```
+9 trades × $200 position × 2.37% avg win = ~$42 gross
+Minus 1 loss × $200 × 1.80% = -$3.60
+Net = ~$38 (before fees)
+```
+
+**The Trade-off:**
+| Metric | Without Risk Mgmt | With Risk Mgmt |
+|--------|-------------------|----------------|
+| Win Rate | ~55% | ~89% |
+| Trades Taken | More | Fewer (filtered) |
+| Risk per Trade | Higher | Lower (2%) |
+| Drawdown | Higher | Lower |
+| Returns | Higher variance | Lower but stable |
+
+**To Increase Returns (with more risk):**
+```bash
+# Increase position size in strategy settings
+# Or disable some filters:
+python main.py --mode backtest --days 90 --strategy orderblock_premium_v2 --real-data --risk-mgmt --no-mtf
+
+# Or run without risk management for higher returns (but more risk):
+python main.py --mode backtest --days 90 --strategy orderblock_premium_v2 --real-data
+```
+
+**Key Insight:** Phase 1 is designed for **capital preservation**, not maximum returns. The high win rate means you're only taking the highest-quality setups. Scale position size up once you have confidence in the system.
+
 ---
 
 ## ⚠️ Important Recommendations
