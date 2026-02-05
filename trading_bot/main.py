@@ -1026,9 +1026,202 @@ def test_phase1_features(symbol: str = "BTC/USDT", exchange: str = "binance"):
     return results
 
 
+def run_vectorbt_backtest(symbol: str = "BTC/USDT",
+                          days: int = 60,
+                          initial_capital: float = 10000.0,
+                          exchange: str = "binance",
+                          timeframe: str = "15m",
+                          use_trend_filter: bool = True,
+                          require_fvg: bool = True):
+    """Run VectorBT-powered backtest (100x faster)"""
+    
+    print(f"\n{'='*60}")
+    print(f"⚡ VECTORBT BACKTEST MODE (100x FASTER)")
+    print(f"{'='*60}")
+    print(f"Symbol: {symbol}")
+    print(f"Days: {days}")
+    print(f"Initial Capital: ${initial_capital:,.2f}")
+    print(f"Exchange: {exchange}")
+    print(f"Timeframe: {timeframe}")
+    print(f"{'='*60}\n")
+    
+    try:
+        from vbt_integration.strategy_adapter import VectorBTOrderBlock, VectorBTConfig
+    except ImportError:
+        print("❌ VectorBT module not found. Install with: pip install vectorbt")
+        return None
+    
+    # Fetch data
+    print("Loading data...")
+    df = fetch_real_data(symbol=symbol, days=days, timeframe=timeframe, exchange_id=exchange)
+    print(f"Data range: {df.index[0]} to {df.index[-1]}")
+    print(f"Total bars: {len(df):,}")
+    
+    # Configure strategy
+    config = VectorBTConfig(
+        use_trend_filter=use_trend_filter,
+        require_fvg=require_fvg,
+        require_displacement=True,
+        ema_fast=50,
+        ema_slow=200,
+        input_range=25,
+        max_age_bars=150,
+        sl_atr_mult=1.5,
+        tp_rr_mult=2.5
+    )
+    
+    # Run backtest
+    print("\nRunning VectorBT backtest...")
+    strategy = VectorBTOrderBlock(config)
+    pf = strategy.backtest(df, initial_capital, verbose=True)
+    
+    # Save trades
+    os.makedirs('results', exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    try:
+        trades_df = pf.trades.records_readable
+        trades_df.to_csv(f'results/vbt_trades_{timestamp}.csv', index=False)
+        print(f"\n✓ Trades saved to results/vbt_trades_{timestamp}.csv")
+    except:
+        pass
+    
+    return pf
+
+
+def run_vectorbt_optimize(symbol: str = "BTC/USDT",
+                          days: int = 90,
+                          exchange: str = "binance",
+                          timeframe: str = "15m",
+                          quick: bool = True):
+    """Run VectorBT parameter optimization"""
+    
+    print(f"\n{'='*60}")
+    print(f"🔍 VECTORBT PARAMETER OPTIMIZATION")
+    print(f"{'='*60}")
+    print(f"Symbol: {symbol}")
+    print(f"Days: {days}")
+    print(f"Mode: {'Quick' if quick else 'Full'}")
+    print(f"{'='*60}\n")
+    
+    try:
+        from vbt_integration.optimizer import ParameterOptimizer, optimize_strategy
+    except ImportError:
+        print("❌ VectorBT module not found. Install with: pip install vectorbt")
+        return None
+    
+    # Fetch data
+    print("Loading data...")
+    df = fetch_real_data(symbol=symbol, days=days, timeframe=timeframe, exchange_id=exchange)
+    print(f"Data range: {df.index[0]} to {df.index[-1]}")
+    print(f"Total bars: {len(df):,}")
+    
+    # Run optimization
+    print("\nRunning parameter optimization...")
+    result = optimize_strategy(df, quick=quick, verbose=True)
+    
+    # Save results
+    os.makedirs('results', exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    with open(f'results/vbt_optimization_{timestamp}.json', 'w') as f:
+        json.dump(result.to_dict(), f, indent=2, default=str)
+    
+    print(f"\n✓ Optimization results saved to results/vbt_optimization_{timestamp}.json")
+    
+    return result
+
+
+def run_walk_forward(symbol: str = "BTC/USDT",
+                     days: int = 365,
+                     exchange: str = "binance",
+                     timeframe: str = "15m",
+                     train_days: int = 210,
+                     test_days: int = 90):
+    """Run walk-forward analysis to validate strategy"""
+    
+    print(f"\n{'='*60}")
+    print(f"🔄 WALK-FORWARD ANALYSIS")
+    print(f"{'='*60}")
+    print(f"Symbol: {symbol}")
+    print(f"Total Days: {days}")
+    print(f"Train Window: {train_days} days")
+    print(f"Test Window: {test_days} days")
+    print(f"{'='*60}\n")
+    
+    try:
+        from vbt_integration.walk_forward import WalkForwardAnalyzer
+    except ImportError:
+        print("❌ VectorBT module not found. Install with: pip install vectorbt")
+        return None
+    
+    # Fetch data
+    print("Loading data...")
+    df = fetch_real_data(symbol=symbol, days=days, timeframe=timeframe, exchange_id=exchange)
+    print(f"Data range: {df.index[0]} to {df.index[-1]}")
+    print(f"Total bars: {len(df):,}")
+    
+    # Run walk-forward
+    print("\nRunning walk-forward analysis...")
+    analyzer = WalkForwardAnalyzer()
+    result = analyzer.analyze(
+        df,
+        train_days=train_days,
+        test_days=test_days,
+        step_days=30,
+        timeframe=timeframe,
+        verbose=True
+    )
+    
+    # Save results
+    os.makedirs('results', exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    with open(f'results/walk_forward_{timestamp}.json', 'w') as f:
+        json.dump(result.to_dict(), f, indent=2, default=str)
+    
+    print(f"\n✓ Walk-forward results saved to results/walk_forward_{timestamp}.json")
+    
+    return result
+
+
+def run_benchmark(symbol: str = "BTC/USDT",
+                  days: int = 60,
+                  exchange: str = "binance",
+                  timeframe: str = "15m"):
+    """Run benchmark comparison: loop-based vs VectorBT"""
+    
+    print(f"\n{'='*60}")
+    print(f"[BENCHMARK] LOOP VS VECTORBT")
+    print(f"{'='*60}")
+    print(f"Symbol: {symbol}")
+    print(f"Days: {days}")
+    print(f"{'='*60}\n")
+    
+    try:
+        from vbt_integration.benchmark import BacktestBenchmark
+    except ImportError:
+        print("❌ VectorBT module not found. Install with: pip install vectorbt")
+        return None
+    
+    # Fetch data
+    print("Loading data...")
+    df = fetch_real_data(symbol=symbol, days=days, timeframe=timeframe, exchange_id=exchange)
+    print(f"Data range: {df.index[0]} to {df.index[-1]}")
+    print(f"Total bars: {len(df):,}")
+    
+    # Run benchmark
+    print("\nRunning benchmark...")
+    benchmark = BacktestBenchmark()
+    result = benchmark.run(df, n_iterations=3, verbose=True)
+    
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description='Trading Bot')
-    parser.add_argument('--mode', choices=['backtest', 'live', 'optimize', 'last_ob', 'risk-test'],
+    parser.add_argument('--mode', choices=['backtest', 'live', 'optimize', 'last_ob', 'risk-test', 
+                                           'vbt', 'vbt-optimize', 'walk-forward', 'benchmark'],
                         default='backtest', help='Running mode')
     parser.add_argument('--symbol', type=str, default='BTC/USDT',
                         help='Trading symbol (e.g., BTC/USDT, ETH/USDT)')
@@ -1063,6 +1256,18 @@ def main():
                         help='Disable circuit breaker (used with --risk-mgmt)')
     parser.add_argument('--use-funding', action='store_true',
                         help='Enable funding rate filter (used with --risk-mgmt)')
+    
+    # VectorBT flags
+    parser.add_argument('--no-trend-filter', action='store_true',
+                        help='Disable trend filter in VectorBT mode')
+    parser.add_argument('--no-fvg', action='store_true',
+                        help='Disable FVG filter in VectorBT mode')
+    parser.add_argument('--quick', action='store_true',
+                        help='Quick optimization (fewer combinations)')
+    parser.add_argument('--train-days', type=int, default=210,
+                        help='Training window for walk-forward (default: 210)')
+    parser.add_argument('--test-days', type=int, default=90,
+                        help='Test window for walk-forward (default: 90)')
 
     args = parser.parse_args()
 
@@ -1103,6 +1308,40 @@ def main():
         test_phase1_features(
             symbol=args.symbol,
             exchange=args.exchange
+        )
+    elif args.mode == 'vbt':
+        run_vectorbt_backtest(
+            symbol=args.symbol,
+            days=args.days,
+            initial_capital=args.capital,
+            exchange=args.exchange,
+            timeframe=args.timeframe,
+            use_trend_filter=not args.no_trend_filter,
+            require_fvg=not args.no_fvg
+        )
+    elif args.mode == 'vbt-optimize':
+        run_vectorbt_optimize(
+            symbol=args.symbol,
+            days=args.days,
+            exchange=args.exchange,
+            timeframe=args.timeframe,
+            quick=args.quick
+        )
+    elif args.mode == 'walk-forward':
+        run_walk_forward(
+            symbol=args.symbol,
+            days=args.days,
+            exchange=args.exchange,
+            timeframe=args.timeframe,
+            train_days=args.train_days,
+            test_days=args.test_days
+        )
+    elif args.mode == 'benchmark':
+        run_benchmark(
+            symbol=args.symbol,
+            days=args.days,
+            exchange=args.exchange,
+            timeframe=args.timeframe
         )
 
 
