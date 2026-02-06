@@ -1057,7 +1057,7 @@ def run_vectorbt_backtest(symbol: str = "BTC/USDT",
     print(f"Data range: {df.index[0]} to {df.index[-1]}")
     print(f"Total bars: {len(df):,}")
     
-    # Configure strategy
+    # Configure strategy (matches PremiumV2 defaults exactly)
     config = VectorBTConfig(
         use_trend_filter=use_trend_filter,
         require_fvg=require_fvg,
@@ -1066,8 +1066,12 @@ def run_vectorbt_backtest(symbol: str = "BTC/USDT",
         ema_slow=200,
         input_range=25,
         max_age_bars=150,
-        sl_atr_mult=1.5,
-        tp_rr_mult=2.5
+        sl_atr_mult=1.0,
+        sl_atr_buffer=0.5,
+        tp_rr_mult=2.5,
+        use_dynamic_rr=True,
+        use_partial_tp=True,
+        mss_confirmation_bars=20,
     )
     
     # Run backtest
