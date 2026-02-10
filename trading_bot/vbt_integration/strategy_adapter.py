@@ -119,12 +119,13 @@ def _precompute_indicators(df: pd.DataFrame, cfg: VectorBTConfig) -> pd.DataFram
     """Compute every indicator the V2 state-machine needs, vectorized."""
     df = df.copy()
 
-    # ATR-14
+    # ATR-14 using Wilder's smoothing (EWM) — matches pandas_ta default
     hl = df['high'] - df['low']
     hc = (df['high'] - df['close'].shift(1)).abs()
     lc = (df['low']  - df['close'].shift(1)).abs()
     tr = pd.concat([hl, hc, lc], axis=1).max(axis=1)
-    df['atr'] = tr.rolling(14).mean()
+    # Wilder's smoothing: alpha = 1/period, equivalent to EWM(span=2*period-1)
+    df['atr'] = tr.ewm(alpha=1.0/14, min_periods=14, adjust=False).mean()
     df['atr_pct'] = (df['atr'] / df['close']) * 100
 
     # EMAs
@@ -149,15 +150,18 @@ def _run_exact_v2_loop(
     ema_slow_arr: np.ndarray,
     cfg: VectorBTConfig,
     n: int,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict]:
     """
     Run the exact PremiumV2 state machine bar-by-bar.
 
-    Returns four 1-D float arrays of length *n*:
+    Returns six 1-D float arrays of length *n* + diagnostics dict:
         entry_side   –  0 = no entry,  1 = LONG, -1 = SHORT
         sl_price     –  stop-loss price (0 when no entry)
         tp_price     –  take-profit price (0 when no entry)
         entry_size   –  position size fraction (0 when no entry)
+        exit_long    –  1.0 on bars where a long position exits
+        exit_short   –  1.0 on bars where a short position exits
+        diagnostics  –  dict with signal pipeline counters
     """
 
     # Output arrays
@@ -165,6 +169,18 @@ def _run_exact_v2_loop(
     sl_out     = np.zeros(n, dtype=np.float64)
     tp_out     = np.zeros(n, dtype=np.float64)
     size_out   = np.zeros(n, dtype=np.float64)
+    exit_long  = np.zeros(n, dtype=np.float64)
+    exit_short = np.zeros(n, dtype=np.float64)
+
+    # Diagnostic counters
+    diag = {
+        'bearish_bos': 0, 'short_obs_created': 0,
+        'bullish_bos': 0, 'long_obs_created': 0,
+        'poi_activated_long': 0, 'poi_activated_short': 0,
+        'mss_confirmed': 0, 'rr_rejected': 0,
+        'entries_long': 0, 'entries_short': 0,
+        'exits_sl': 0, 'exits_tp': 0,
+    }
 
     # ---- State variables (mirrors _init_state / on_bar exactly) ----
     last_down_high  = 0.0
@@ -243,6 +259,7 @@ def _run_exact_v2_loop(
         # ==================================================================
         prev_bar_close = close_arr[i - 1]
         if prev_bar_close >= structure_low and c_i < structure_low:
+            diag['bearish_bos'] += 1
             # ---- FVG check ----
             has_fvg = True
             fvg_pct = 0.0
@@ -280,6 +297,7 @@ def _run_exact_v2_loop(
                 ob = _OB(idx=last_up_idx, high=last_high, low=last_up_low, ob_type='bearish')
                 short_obs.append(ob)
                 last_short_create_idx = last_up_idx
+                diag['short_obs_created'] += 1
 
         # ==================================================================
         # 3. BULLISH BOS  →  mitigate last bearish OB, create *bullish* OB
@@ -288,6 +306,7 @@ def _run_exact_v2_loop(
         if short_obs:
             last_short_ob = short_obs[-1]
             if last_short_ob.active and c_i > last_short_ob.high and i > last_short_ob.idx:
+                diag['bullish_bos'] += 1
                 # ---- FVG check (bullish) ----
                 has_fvg_b = True
                 if cfg.require_fvg and i >= 2:
@@ -322,6 +341,7 @@ def _run_exact_v2_loop(
                     ob_b = _OB(idx=last_down_idx, high=last_down_high, low=last_down_low, ob_type='bullish')
                     long_obs.append(ob_b)
                     last_long_create_idx = i
+                    diag['long_obs_created'] += 1
 
                 # Remove (mitigate) the short OB
                 short_obs.pop()
@@ -353,9 +373,19 @@ def _run_exact_v2_loop(
             if active_side > 0:   # long
                 if l_i <= active_sl or h_i >= active_tp:
                     in_position = False
+                    exit_long[i] = 1.0
+                    if l_i <= active_sl:
+                        diag['exits_sl'] += 1
+                    else:
+                        diag['exits_tp'] += 1
             elif active_side < 0:  # short
                 if h_i >= active_sl or l_i <= active_tp:
                     in_position = False
+                    exit_short[i] = 1.0
+                    if h_i >= active_sl:
+                        diag['exits_sl'] += 1
+                    else:
+                        diag['exits_tp'] += 1
 
         # ==================================================================
         # 6. CHECK ENTRIES (POI activation + MSS confirmation)
@@ -409,6 +439,7 @@ def _run_exact_v2_loop(
                     'tap_idx': i,
                     'waiting': True,
                 }
+                diag['poi_activated_long'] += 1
 
         for ob in short_obs:
             if not ob.active:
@@ -425,6 +456,7 @@ def _run_exact_v2_loop(
                     'tap_idx': i,
                     'waiting': True,
                 }
+                diag['poi_activated_short'] += 1
 
         # ---- 5b. Check active POIs for MSS ----
 
@@ -495,6 +527,8 @@ def _run_exact_v2_loop(
             if not mss_ok:
                 continue
 
+            diag['mss_confirmed'] += 1
+
             # ---- Add ATR buffer to SL ----
             buffer = atr_i * cfg.sl_atr_buffer
             if direction == 'bullish':
@@ -526,6 +560,7 @@ def _run_exact_v2_loop(
 
             rr = reward / risk if risk > 0 else 0
             if rr < cfg.min_risk_reward:
+                diag['rr_rejected'] += 1
                 continue
 
             # ---- Record entry ----
@@ -537,6 +572,10 @@ def _run_exact_v2_loop(
             active_side    = entry_side[i]
             active_sl      = sl_price
             active_tp      = tp_price
+            if direction == 'bullish':
+                diag['entries_long'] += 1
+            else:
+                diag['entries_short'] += 1
 
             expired_keys.append(poi_key)
             break  # one entry per bar
@@ -544,7 +583,7 @@ def _run_exact_v2_loop(
         for k in expired_keys:
             active_pois.pop(k, None)
 
-    return entry_side, sl_out, tp_out, size_out
+    return entry_side, sl_out, tp_out, size_out, exit_long, exit_short, diag
 
 
 # ---------------------------------------------------------------------------
@@ -626,49 +665,34 @@ class VectorBTOrderBlock(VectorBTStrategyAdapter):
         ema_slow_arr = df['ema_slow'].values.astype(np.float64)
 
         # 3. Run exact V2 state machine
-        entry_side, sl_arr, tp_arr, size_arr = _run_exact_v2_loop(
-            open_arr, high_arr, low_arr, close_arr,
-            atr_arr, atr_pct_arr, ema_fast_arr, ema_slow_arr,
-            cfg, n,
-        )
+        entry_side, sl_arr, tp_arr, size_arr, exit_long_arr, exit_short_arr, diag = \
+            _run_exact_v2_loop(
+                open_arr, high_arr, low_arr, close_arr,
+                atr_arr, atr_pct_arr, ema_fast_arr, ema_slow_arr,
+                cfg, n,
+            )
+        self._last_diag = diag  # store for diagnostics
 
         # 4. Build entry / exit boolean arrays
         long_entries  = pd.Series(entry_side > 0, index=df.index)
         short_entries = pd.Series(entry_side < 0, index=df.index)
+        long_exits    = pd.Series(exit_long_arr > 0, index=df.index)
+        short_exits   = pd.Series(exit_short_arr > 0, index=df.index)
         any_entry     = long_entries | short_entries
         self._last_entries = entry_side  # store for diagnostics
 
         n_long  = int(long_entries.sum())
         n_short = int(short_entries.sum())
 
-        # 5. Compute per-entry SL/TP stop as *fraction of entry price*
-        #    VectorBT wants sl_stop / tp_stop as positive floats.
-        sl_frac = pd.Series(0.0, index=df.index)
-        tp_frac = pd.Series(0.0, index=df.index)
-
-        entry_mask = any_entry.values
-        for idx in np.where(entry_mask)[0]:
-            ep = close_arr[idx]
-            if ep <= 0:
-                continue
-            if entry_side[idx] > 0:  # long
-                sl_frac.iloc[idx] = abs(ep - sl_arr[idx]) / ep
-                tp_frac.iloc[idx] = abs(tp_arr[idx] - ep) / ep
-            else:  # short
-                sl_frac.iloc[idx] = abs(sl_arr[idx] - ep) / ep
-                tp_frac.iloc[idx] = abs(ep - tp_arr[idx]) / ep
-
-        # Forward-fill so every bar in the trade uses the same SL/TP %
-        sl_frac = sl_frac.replace(0, np.nan).ffill().fillna(0.05)
-        tp_frac = tp_frac.replace(0, np.nan).ffill().fillna(0.10)
-
-        # 6. Build VectorBT portfolios
+        # 5. Build VectorBT portfolios using explicit entries + exits
+        #    This eliminates sl_frac/tp_frac exit-timing mismatches that
+        #    caused VBT to stay in trades longer than intended, blocking
+        #    subsequent entries and collapsing 31 trades → 2.
         if n_long > 0:
             pf_long = vbt.Portfolio.from_signals(
                 close=df['close'],
                 entries=long_entries,
-                sl_stop=sl_frac,
-                tp_stop=tp_frac,
+                exits=long_exits,
                 init_cash=initial_capital / 2 if n_short > 0 else initial_capital,
                 fees=cfg.fee_pct,
                 slippage=cfg.slippage_pct,
@@ -681,8 +705,7 @@ class VectorBTOrderBlock(VectorBTStrategyAdapter):
             pf_short = vbt.Portfolio.from_signals(
                 close=df['close'],
                 entries=short_entries,
-                sl_stop=sl_frac,
-                tp_stop=tp_frac,
+                exits=short_exits,
                 init_cash=initial_capital / 2 if n_long > 0 else initial_capital,
                 fees=cfg.fee_pct,
                 slippage=cfg.slippage_pct,
@@ -710,6 +733,15 @@ class VectorBTOrderBlock(VectorBTStrategyAdapter):
             print(f"  Dynamic R:R:   {'ON' if cfg.use_dynamic_rr else 'OFF'}")
             print(f"  Partial TP:    {'ON' if cfg.use_partial_tp else 'OFF'}")
             print(f"  SL ATR Buffer: {cfg.sl_atr_buffer}x")
+            print(f"{'─'*60}")
+            print(f"Signal Pipeline:")
+            print(f"  Bearish BOS:     {diag['bearish_bos']:>4}  →  Short OBs: {diag['short_obs_created']}")
+            print(f"  Bullish BOS:     {diag['bullish_bos']:>4}  →  Long OBs:  {diag['long_obs_created']}")
+            print(f"  POI Taps:        {diag['poi_activated_long'] + diag['poi_activated_short']:>4}  (L:{diag['poi_activated_long']} S:{diag['poi_activated_short']})")
+            print(f"  MSS Confirmed:   {diag['mss_confirmed']:>4}")
+            print(f"  R:R Rejected:    {diag['rr_rejected']:>4}")
+            print(f"  Entries:         {diag['entries_long'] + diag['entries_short']:>4}  (L:{diag['entries_long']} S:{diag['entries_short']})")
+            print(f"  Exits SL/TP:     {diag['exits_sl']}/{diag['exits_tp']}")
             print(f"{'─'*60}")
 
             if pf_long is not None:
@@ -741,8 +773,37 @@ class VectorBTOrderBlock(VectorBTStrategyAdapter):
             print(f"  Signals:         {n_long} long + {n_short} short = {n_long + n_short} total")
             print(f"{'='*60}\n")
 
-        # Return the long portfolio (or short if no long trades)
-        return pf_long if pf_long is not None else pf_short
+        # Return combined portfolio (both sides merged), or whichever exists
+        if pf_long is not None and pf_short is not None:
+            # Build a single combined portfolio with both long and short entries
+            all_entries = long_entries | short_entries
+            all_exits   = long_exits  | short_exits
+            # For the combined portfolio, use 'both' direction so VBT can handle
+            # long and short signals together
+            pf_combined = vbt.Portfolio.from_signals(
+                close=df['close'],
+                entries=long_entries,
+                exits=long_exits,
+                short_entries=short_entries,
+                short_exits=short_exits,
+                init_cash=initial_capital,
+                fees=cfg.fee_pct,
+                slippage=cfg.slippage_pct,
+                freq='15min',
+            )
+            return pf_combined
+        elif pf_long is not None:
+            return pf_long
+        elif pf_short is not None:
+            return pf_short
+        else:
+            # No trades — return an empty portfolio
+            return vbt.Portfolio.from_signals(
+                close=df['close'],
+                entries=pd.Series(False, index=df.index),
+                init_cash=initial_capital,
+                freq='15min',
+            )
 
     def backtest_long_only(self, df: pd.DataFrame, initial_capital: float = 10000,
                            verbose: bool = True) -> 'vbt.Portfolio':
@@ -761,11 +822,14 @@ class VectorBTOrderBlock(VectorBTStrategyAdapter):
         """Return counts from the last backtest run."""
         if self._last_entries is None:
             return {}
-        return {
+        summary = {
             'total_entries': int(np.count_nonzero(self._last_entries)),
             'long_entries':  int(np.sum(self._last_entries > 0)),
             'short_entries': int(np.sum(self._last_entries < 0)),
         }
+        if hasattr(self, '_last_diag') and self._last_diag:
+            summary['diagnostics'] = self._last_diag
+        return summary
 
 
 # ---------------------------------------------------------------------------
