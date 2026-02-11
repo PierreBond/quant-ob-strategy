@@ -297,6 +297,10 @@ def run_backtest(symbol: str = "BTC/USDT",
     )
 
     result = engine.run(df, strategy, verbose=True)
+    
+    # Print detailed filter analysis if risk management was enabled
+    if use_risk_management:
+        engine.print_filter_analysis()
 
     # Save results
     os.makedirs('results', exist_ok=True)
@@ -309,6 +313,11 @@ def run_backtest(symbol: str = "BTC/USDT",
     # Save results to JSON
     with open(f'results/backtest_{timestamp}.json', 'w') as f:
         json.dump(result.to_dict(), f, indent=2, default=str)
+    
+    # Export filter analysis if risk management was enabled
+    if use_risk_management and engine.filter_analyzer:
+        filter_analysis_path = engine.export_filter_analysis(f'results/filter_analysis_{timestamp}.json')
+        print(f"  - filter_analysis_{timestamp}.json")
 
     # Plot results
     os.makedirs('charts', exist_ok=True)

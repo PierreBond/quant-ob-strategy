@@ -200,6 +200,14 @@ class BacktestEngine:
         self.max_position_size = max_position_size
         self.enable_journal = enable_journal
         self.risk_manager = risk_manager  # Phase 1 Risk Manager
+        
+        # Initialize filter analyzer for rejection tracking
+        self.filter_analyzer = None
+        try:
+            from trading_bot.utils.filter_analyzer import FilterAnalyzer
+            self.filter_analyzer = FilterAnalyzer()
+        except ImportError:
+            pass
 
         self.capital = initial_capital
         self.position: PositionSide = PositionSide.FLAT
@@ -355,6 +363,29 @@ class BacktestEngine:
                 if not decision.can_trade:
                     # Trade rejected by risk management
                     self.trades_filtered_by_risk += 1
+                    
+                    # Log rejection reasons per filter
+                    if self.filter_analyzer and decision.reasons:
+                        for reason in decision.reasons:
+                            # Parse the reason to extract filter name
+                            if reason.startswith('Circuit'):
+                                filter_name = 'Circuit Breaker'
+                            elif reason.startswith('MTF'):
+                                filter_name = 'Multi-Timeframe'
+                            elif reason.startswith('Funding'):
+                                filter_name = 'Funding Rate'
+                            elif reason.startswith('Order Flow'):
+                                filter_name = 'Order Flow'
+                            else:
+                                filter_name = 'Unknown'
+                            
+                            self.filter_analyzer.log_rejection(
+                                symbol=symbol,
+                                direction=signal_type,
+                                filter_name=filter_name,
+                                rejection_reason=reason,
+                                position_size=signal.get('size', 0.02)
+                            )
                     return
                 
                 # Use risk manager's position size if Kelly is enabled
@@ -626,6 +657,30 @@ class BacktestEngine:
                 status = self.risk_manager.circuit_breaker.get_status()
                 print(f"{'Circuit Breaker State':<25} {status['state']:>15}")
             
+            # Print filter analysis if available
+            if self.filter_analyzer and len(self.filter_analyzer.rejections) > 0:
+                print(f"\n{'─'*42}")
+                print("📊 FILTER REJECTION BREAKDOWN")
+                print(f"{'─'*42}")
+                
+                blocker, blocker_count, blocker_pct = self.filter_analyzer.get_blocklist_filter()
+                print(f"\nMost Blocking Filter: {blocker} ({blocker_pct:.1f}%)")
+                
+                # Show top 3 rejection reasons
+                all_reasons = {}
+                for filter_name, stats in self.filter_analyzer.filter_stats.items():
+                    for reason, count in stats['reasons'].items():
+                        if reason not in all_reasons:
+                            all_reasons[reason] = 0
+                        all_reasons[reason] += count
+                
+                if all_reasons:
+                    top_reasons = sorted(all_reasons.items(), key=lambda x: x[1], reverse=True)[:3]
+                    print(f"\nTop Rejection Reasons:")
+                    for reason, count in top_reasons:
+                        pct = (count / self.trades_filtered_by_risk) * 100
+                        print(f"   • {reason}: {count} ({pct:.1f}%)")
+            
             # Print order flow status
             if hasattr(self.risk_manager, 'order_flow') and self.risk_manager.order_flow:
                 print(f"\n{'─'*42}")
@@ -637,6 +692,7 @@ class BacktestEngine:
                     print(f"{'Confidence':<25} {conf:>14.0%}")
                 except Exception:
                     print(f"{'Status':<25} {'Unavailable':>15}")
+        # === End Risk Management Stats ===
         # === End Risk Management Stats ===
         
         print(f"{'='*60}\n")
@@ -708,6 +764,49 @@ class BacktestEngine:
             print(f"Chart saved to: {save_path}")
 
         return fig
+
+    def print_filter_analysis(self):
+        """Print detailed filter rejection analysis"""
+        if not self.filter_analyzer or len(self.filter_analyzer.rejections) == 0:
+            return
+        
+        print("\n" + "="*70)
+        print("📊 DETAILED FILTER REJECTION ANALYSIS")
+        print("="*70)
+        
+        self.filter_analyzer.print_report()
+        
+        # Print recommendations
+        recommendations = self.filter_analyzer.get_recommendations()
+        if recommendations:
+            print("\n" + "-"*70)
+            print("💡 RECOMMENDATIONS TO RESTORE PERFORMANCE")
+            print("-"*70)
+            
+            for i, rec in enumerate(recommendations, 1):
+                if 'note' in rec:
+                    print(f"\n✓ {rec['note']}")
+                else:
+                    print(f"\n{i}. {rec['filter'].upper()}")
+                    print(f"   ❌ Issue: {rec['issue']}")
+                    print(f"   Current: {rec['current_setting']}")
+                    print(f"   ✅ Suggestion: {rec['recommendation']}")
+                    print(f"   Impact: {rec['impact']}")
+                    print(f"   Risk: {rec['risk_change']}")
+                    print(f"   Result: {rec['estimated_increase']}")
+        
+        print("\n" + "="*70 + "\n")
+    
+    def export_filter_analysis(self, filepath: str = None):
+        """Export filter analysis to JSON file"""
+        if not self.filter_analyzer:
+            return
+        
+        if filepath is None:
+            filepath = f"filter_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        
+        self.filter_analyzer.export_rejections(filepath)
+        return filepath
 
 
 # ============================================================================

@@ -1,0 +1,127 @@
+{
+  "export_time": "2026-02-11T16:50:37.564357",
+  "total_rejections": 12,
+  "rejections": [
+    {
+      "timestamp": "2026-02-11T16:50:30.963604",
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "filter": "Multi-Timeframe",
+      "reason": "MTF rejection: 0/3",
+      "position_size": 0.5
+    },
+    {
+      "timestamp": "2026-02-11T16:50:30.967495",
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "filter": "Multi-Timeframe",
+      "reason": "MTF rejection: 0/3",
+      "position_size": 0.5
+    },
+    {
+      "timestamp": "2026-02-11T16:50:34.413222",
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "filter": "Multi-Timeframe",
+      "reason": "MTF rejection: 0/3",
+      "position_size": 0.5
+    },
+    {
+      "timestamp": "2026-02-11T16:50:35.106474",
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "filter": "Multi-Timeframe",
+      "reason": "MTF rejection: 0/3",
+      "position_size": 0.5
+    },
+    {
+      "timestamp": "2026-02-11T16:50:35.111429",
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "filter": "Multi-Timeframe",
+      "reason": "MTF rejection: 0/3",
+      "position_size": 0.5
+    },
+    {
+      "timestamp": "2026-02-11T16:50:35.114942",
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "filter": "Multi-Timeframe",
+      "reason": "MTF rejection: 0/3",
+      "position_size": 0.5
+    },
+    {
+      "timestamp": "2026-02-11T16:50:35.381411",
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "filter": "Multi-Timeframe",
+      "reason": "MTF rejection: 0/3",
+      "position_size": 0.5
+    },
+    {
+      "timestamp": "2026-02-11T16:50:35.393042",
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "filter": "Multi-Timeframe",
+      "reason": "MTF rejection: 0/3",
+      "position_size": 0.5
+    },
+    {
+      "timestamp": "2026-02-11T16:50:35.395558",
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "filter": "Multi-Timeframe",
+      "reason": "MTF rejection: 0/3",
+      "position_size": 0.5
+    },
+    {
+      "timestamp": "2026-02-11T16:50:35.406397",
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "filter": "Multi-Timeframe",
+      "reason": "MTF rejection: 0/3",
+      "position_size": 0.5
+    },
+    {
+      "timestamp": "2026-02-11T16:50:36.184167",
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "filter": "Multi-Timeframe",
+      "reason": "MTF rejection: 0/3",
+      "position_size": 0.5
+    },
+    {
+      "timestamp": "2026-02-11T16:50:36.188059",
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "filter": "Multi-Timeframe",
+      "reason": "MTF rejection: 0/3",
+      "position_size": 0.5
+    }
+  ],
+  "statistics": {
+    "total_rejections": 12,
+    "total_unique_symbols": 1,
+    "rejection_rate": 100.0,
+    "filters_ranked": [
+      "Multi-Timeframe"
+    ],
+    "filters": {
+      "Multi-Timeframe": {
+        "count": 12,
+        "percentage": 100.0,
+        "top_reason": "MTF rejection: 0/3",
+        "top_reason_count": 12,
+        "unique_reasons": 1,
+        "symbols_affected": {
+          "BTC/USDT": 12
+        },
+        "long_rejections": 12,
+        "short_rejections": 0,
+        "all_reasons": {
+          "MTF rejection: 0/3": 12
+        }
+      }
+    }
+  }
+}
