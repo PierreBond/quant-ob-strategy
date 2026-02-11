@@ -51,6 +51,16 @@ from .risk_manager import (
     get_risk_manager
 )
 
+from .order_flow import (
+    OrderFlowAnalyzer,
+    OrderFlowSignal,
+    OrderFlowBias,
+    CVDData,
+    OpenInterestData,
+    LargeTradeData,
+    get_order_flow_analyzer
+)
+
 __all__ = [
     # Notifications
     'TelegramNotifier',
@@ -84,5 +94,14 @@ __all__ = [
     # Risk Manager (Unified)
     'RiskManager',
     'TradeDecision',
-    'get_risk_manager'
+    'get_risk_manager',
+    
+    # Order Flow Analysis (Phase 2)
+    'OrderFlowAnalyzer',
+    'OrderFlowSignal',
+    'OrderFlowBias',
+    'CVDData',
+    'OpenInterestData',
+    'LargeTradeData',
+    'get_order_flow_analyzer'
 ]

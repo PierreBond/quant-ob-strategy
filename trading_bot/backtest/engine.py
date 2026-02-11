@@ -625,6 +625,18 @@ class BacktestEngine:
             if hasattr(self.risk_manager, 'circuit_breaker') and self.risk_manager.circuit_breaker:
                 status = self.risk_manager.circuit_breaker.get_status()
                 print(f"{'Circuit Breaker State':<25} {status['state']:>15}")
+            
+            # Print order flow status
+            if hasattr(self.risk_manager, 'order_flow') and self.risk_manager.order_flow:
+                print(f"\n{'─'*42}")
+                print("📊 ORDER FLOW ANALYSIS (Phase 2)")
+                print(f"{'─'*42}")
+                try:
+                    bias, conf = self.risk_manager.order_flow.get_bias()
+                    print(f"{'Current Bias':<25} {bias:>15}")
+                    print(f"{'Confidence':<25} {conf:>14.0%}")
+                except Exception:
+                    print(f"{'Status':<25} {'Unavailable':>15}")
         # === End Risk Management Stats ===
         
         print(f"{'='*60}\n")

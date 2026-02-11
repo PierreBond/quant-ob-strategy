@@ -16,6 +16,7 @@ from .position_sizing import PositionSizer, get_position_sizer
 from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig, get_circuit_breaker
 from .multi_timeframe import MultiTimeframeAnalyzer, get_mtf_analyzer
 from .funding_rate import FundingRateFilter, get_funding_filter
+from .order_flow import OrderFlowAnalyzer, get_order_flow_analyzer
 
 
 @dataclass
@@ -65,7 +66,9 @@ class RiskManager:
         use_funding: bool = True,
         use_circuit_breaker: bool = True,
         use_kelly: bool = True,
+        use_order_flow: bool = False,
         strict_funding: bool = False,
+        strict_order_flow: bool = False,
         require_all_mtf: bool = False,
         circuit_breaker_config: CircuitBreakerConfig = None
     ):
@@ -79,7 +82,9 @@ class RiskManager:
             use_funding: Enable funding rate filter
             use_circuit_breaker: Enable circuit breaker
             use_kelly: Enable Kelly position sizing
+            use_order_flow: Enable order flow analysis (Phase 2)
             strict_funding: Use stricter funding thresholds
+            strict_order_flow: Use stricter order flow thresholds
             require_all_mtf: Require ALL higher TFs to confirm
             circuit_breaker_config: Custom circuit breaker config
         """
@@ -91,7 +96,9 @@ class RiskManager:
         self.use_funding = use_funding
         self.use_circuit_breaker = use_circuit_breaker
         self.use_kelly = use_kelly
+        self.use_order_flow = use_order_flow
         self.strict_funding = strict_funding
+        self.strict_order_flow = strict_order_flow
         self.require_all_mtf = require_all_mtf
         
         # Initialize components
@@ -103,6 +110,7 @@ class RiskManager:
         
         self.mtf_analyzer = MultiTimeframeAnalyzer(exchange_id=exchange_id) if use_mtf else None
         self.funding_filter = FundingRateFilter(exchange_id=exchange_id) if use_funding else None
+        self.order_flow = OrderFlowAnalyzer(exchange_id=exchange_id) if use_order_flow else None
         
         # Track state
         self._mtf_data_loaded = False
@@ -213,7 +221,28 @@ class RiskManager:
             if confidence > 0.5 and bias != direction and bias != 'NEUTRAL':
                 warnings.append(f"Trading against funding bias ({bias})")
         
-        # 4. Calculate Position Size
+        # 4. Check Order Flow (Phase 2)
+        if self.use_order_flow and self.order_flow and can_trade:
+            try:
+                avoid, reason = self.order_flow.should_avoid_trade(
+                    symbol, direction, strict=self.strict_order_flow
+                )
+                
+                if avoid:
+                    can_trade = False
+                    reasons.append(f"Order Flow: {reason}")
+                else:
+                    # Get signal for warnings
+                    signal = self.order_flow.get_order_flow_signal(symbol, direction)
+                    if signal.warnings:
+                        warnings.extend(signal.warnings)
+                    if signal.confidence > 0.5:
+                        bias_str = signal.bias.value.replace('_', ' ').title()
+                        warnings.append(f"Order flow: {bias_str} ({signal.confidence:.0%})")
+            except Exception as e:
+                warnings.append(f"Order flow check failed: {e}")
+        
+        # 5. Calculate Position Size
         position_size_pct = 0.02  # Default 2%
         
         if self.use_kelly and self.position_sizer:
@@ -252,6 +281,7 @@ class RiskManager:
         print(f"   Multi-Timeframe: {'✅' if self.use_mtf else '❌'}")
         print(f"   Funding Filter:  {'✅' if self.use_funding else '❌'}")
         print(f"   Kelly Sizing:    {'✅' if self.use_kelly else '❌'}")
+        print(f"   Order Flow:      {'✅' if self.use_order_flow else '❌'}")
         
         if self.circuit_breaker:
             print("\n--- Circuit Breaker ---")
@@ -265,6 +295,15 @@ class RiskManager:
             size, reason = self.position_sizer.get_position_size()
             print(f"   Recommended: {size:.1%} (${self.capital * size:,.2f})")
             print(f"   Reason: {reason}")
+        
+        if self.order_flow:
+            print("\n--- Order Flow ---")
+            try:
+                bias, conf = self.order_flow.get_bias()
+                print(f"   Bias: {bias}")
+                print(f"   Confidence: {conf:.0%}")
+            except Exception:
+                print("   Status: Unavailable")
         
         if self.mtf_analyzer and self._mtf_data_loaded:
             print("\n--- Multi-Timeframe ---")

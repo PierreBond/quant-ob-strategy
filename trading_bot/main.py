@@ -213,7 +213,9 @@ def run_backtest(symbol: str = "BTC/USDT",
                  use_mtf: bool = True,
                  use_funding: bool = False,
                  use_circuit_breaker: bool = True,
-                 use_kelly: bool = True):
+                 use_kelly: bool = True,
+                 use_order_flow: bool = False,
+                 strict_order_flow: bool = False):
     """Run backtest with optional Phase 1 risk management"""
 
     print(f"\n{'='*60}")
@@ -232,6 +234,7 @@ def run_backtest(symbol: str = "BTC/USDT",
         print(f"   • Circuit Breaker:    {'✅' if use_circuit_breaker else '❌'}")
         print(f"   • Multi-Timeframe:    {'✅' if use_mtf else '❌'}")
         print(f"   • Funding Filter:     {'✅' if use_funding else '❌'}")
+        print(f"   • Order Flow:         {'✅' if use_order_flow else '❌'}")
     else:
         print(f"\n🛡️ PHASE 1 RISK MANAGEMENT: DISABLED")
         print(f"   (Use --risk-mgmt to enable)")
@@ -269,7 +272,9 @@ def run_backtest(symbol: str = "BTC/USDT",
                 use_mtf=use_mtf,
                 use_funding=use_funding,
                 use_circuit_breaker=use_circuit_breaker,
-                use_kelly=use_kelly
+                use_kelly=use_kelly,
+                use_order_flow=use_order_flow,
+                strict_order_flow=strict_order_flow
             )
             print("🛡️ Risk Manager initialized")
             
@@ -1222,10 +1227,55 @@ def run_benchmark(symbol: str = "BTC/USDT",
     return result
 
 
+def run_order_flow_analysis(symbol: str = "BTC/USDT", exchange: str = "binance"):
+    """
+    Run standalone order flow analysis (Phase 2)
+    
+    Shows CVD, Open Interest, and Large Trade detection for a symbol.
+    """
+    print(f"\n{'='*60}")
+    print(f"📊 ORDER FLOW ANALYSIS")
+    print(f"{'='*60}")
+    print(f"Symbol: {symbol}")
+    print(f"Exchange: {exchange}")
+    print(f"{'='*60}\n")
+    
+    try:
+        from utils.order_flow import OrderFlowAnalyzer
+    except ImportError:
+        try:
+            from trading_bot.utils.order_flow import OrderFlowAnalyzer
+        except ImportError:
+            print("❌ Could not import OrderFlowAnalyzer")
+            return
+    
+    analyzer = OrderFlowAnalyzer(exchange_id=exchange)
+    
+    # Run full analysis with pretty print
+    signal = analyzer.print_analysis(symbol)
+    
+    # Trade recommendations
+    print(f"\n{'─'*60}")
+    print("📋 TRADE RECOMMENDATIONS")
+    print(f"{'─'*60}")
+    
+    avoid_long, reason_long = analyzer.should_avoid_trade(symbol, 'LONG')
+    avoid_short, reason_short = analyzer.should_avoid_trade(symbol, 'SHORT')
+    
+    print(f"   LONG:  {'❌ AVOID - ' + reason_long if avoid_long else '✅ Order flow OK'}")
+    print(f"   SHORT: {'❌ AVOID - ' + reason_short if avoid_short else '✅ Order flow OK'}")
+    
+    bias, confidence = analyzer.get_bias(symbol)
+    print(f"\n   Suggested Bias: {bias} (confidence: {confidence:.0%})")
+    print(f"{'─'*60}\n")
+    
+    return signal
+
+
 def main():
     parser = argparse.ArgumentParser(description='Trading Bot')
     parser.add_argument('--mode', choices=['backtest', 'live', 'optimize', 'last_ob', 'risk-test', 
-                                           'vbt', 'vbt-optimize', 'walk-forward', 'benchmark'],
+                                           'vbt', 'vbt-optimize', 'walk-forward', 'benchmark', 'order-flow'],
                         default='backtest', help='Running mode')
     parser.add_argument('--symbol', type=str, default='BTC/USDT',
                         help='Trading symbol (e.g., BTC/USDT, ETH/USDT)')
@@ -1260,6 +1310,10 @@ def main():
                         help='Disable circuit breaker (used with --risk-mgmt)')
     parser.add_argument('--use-funding', action='store_true',
                         help='Enable funding rate filter (used with --risk-mgmt)')
+    parser.add_argument('--use-order-flow', action='store_true',
+                        help='Enable order flow analysis: CVD, Open Interest, whale detection (used with --risk-mgmt)')
+    parser.add_argument('--strict-order-flow', action='store_true',
+                        help='Strict order flow filtering - block on moderate signals (used with --use-order-flow)')
     
     # VectorBT flags
     parser.add_argument('--no-trend-filter', action='store_true',
@@ -1288,7 +1342,9 @@ def main():
             use_mtf=not args.no_mtf,
             use_funding=args.use_funding,
             use_circuit_breaker=not args.no_circuit_breaker,
-            use_kelly=not args.no_kelly
+            use_kelly=not args.no_kelly,
+            use_order_flow=args.use_order_flow,
+            strict_order_flow=args.strict_order_flow
         )
     elif args.mode == 'live':
         run_live(
@@ -1346,6 +1402,11 @@ def main():
             days=args.days,
             exchange=args.exchange,
             timeframe=args.timeframe
+        )
+    elif args.mode == 'order-flow':
+        run_order_flow_analysis(
+            symbol=args.symbol,
+            exchange=args.exchange
         )
 
 
