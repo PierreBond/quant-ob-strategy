@@ -122,6 +122,10 @@ class BacktestResult:
     profit_factor: float = 0.0
     max_drawdown: float = 0.0
     avg_trade_duration: float = 0.0
+    sharpe_ratio: float = 0.0
+    total_return_pct: float = 0.0
+    max_drawdown_pct: float = 0.0
+    strategy: str = ""
     trades: List[Trade] = field(default_factory=list)
     equity_curve: List[Dict] = field(default_factory=list)
 
@@ -133,13 +137,17 @@ class BacktestResult:
             "losing_trades": self.losing_trades,
             "total_pnl": self.total_pnl,
             "total_pnl_percent": self.total_pnl_percent,
+            "total_return_pct": self.total_return_pct,
             "avg_win": self.avg_win,
             "avg_loss": self.avg_loss,
             "best_trade": self.best_trade,
             "worst_trade": self.worst_trade,
             "profit_factor": self.profit_factor,
             "max_drawdown": self.max_drawdown,
+            "max_drawdown_pct": self.max_drawdown_pct,
+            "sharpe_ratio": self.sharpe_ratio,
             "avg_trade_duration": self.avg_trade_duration,
+            "strategy": self.strategy,
             "trades": [t.to_dict() for t in self.trades],
             "equity_curve": self.equity_curve
         }
@@ -261,6 +269,9 @@ class BacktestEngine:
         self.equity_curve = []
         self.current_bar_idx = 0
 
+        # Track strategy name for results
+        self._strategy_name = getattr(strategy, 'name', strategy.__class__.__name__)
+
         # Initialize strategy
         df = df.copy()
         strategy.on_init(df)
@@ -279,7 +290,7 @@ class BacktestEngine:
             self.current_bar_idx = i
 
             # Get signal from strategy
-            signal = strategy.on_bar(df.iloc[:i+1], self.position)
+            signal = strategy.on_bar(strategy.data.iloc[:i+1], self.position)
 
             # Process signals
             self._process_signal(signal, row)
@@ -580,7 +591,7 @@ class BacktestEngine:
     def _calculate_results(self) -> BacktestResult:
         """Calculate backtest metrics"""
         if not self.trades:
-            return BacktestResult()
+            return BacktestResult(strategy=getattr(self, '_strategy_name', ''))
 
         wins = [t for t in self.trades if t.pnl > 0]
         losses = [t for t in self.trades if t.pnl <= 0]
@@ -596,19 +607,34 @@ class BacktestEngine:
             if dd > max_dd:
                 max_dd = dd
 
+        # Calculate Sharpe Ratio (annualized, assuming 15min bars)
+        sharpe = 0.0
+        if len(equity) > 1:
+            returns = pd.Series(equity).pct_change().dropna()
+            if returns.std() > 0:
+                # ~35,040 fifteen-minute bars per year
+                bars_per_year = 365.25 * 24 * 4
+                sharpe = (returns.mean() / returns.std()) * np.sqrt(bars_per_year)
+
+        total_return_pct = (self.capital / self.initial_capital - 1) * 100
+
         result = BacktestResult(
             total_trades=len(self.trades),
             winning_trades=len(wins),
             losing_trades=len(losses),
             win_rate=len(wins) / len(self.trades) * 100 if self.trades else 0,
             total_pnl=self.capital - self.initial_capital,
-            total_pnl_percent=(self.capital / self.initial_capital - 1) * 100,
+            total_pnl_percent=total_return_pct,
             avg_win=sum([t.pnl_percent for t in wins]) / len(wins) if wins else 0,
             avg_loss=sum([t.pnl_percent for t in losses]) / len(losses) if losses else 0,
             best_trade=max([t.pnl_percent for t in self.trades]) if self.trades else 0,
             worst_trade=min([t.pnl_percent for t in self.trades]) if self.trades else 0,
             profit_factor=abs(sum([t.pnl for t in wins]) / sum([t.pnl for t in losses])) if losses else float('inf'),
             max_drawdown=max_dd,
+            sharpe_ratio=round(sharpe, 4),
+            total_return_pct=round(total_return_pct, 4),
+            max_drawdown_pct=round(max_dd, 4),
+            strategy=getattr(self, '_strategy_name', ''),
             avg_trade_duration=sum([t.duration for t in self.trades]) / len(self.trades) if self.trades else 0,
             trades=self.trades,
             equity_curve=self.equity_curve
@@ -635,6 +661,7 @@ class BacktestEngine:
         print(f"{'Worst Trade':<25} {result.worst_trade:>14.2f}%")
         print(f"{'Profit Factor':<25} {result.profit_factor:>15.2f}")
         print(f"{'Max Drawdown':<25} {result.max_drawdown:>14.2f}%")
+        print(f"{'Sharpe Ratio':<25} {result.sharpe_ratio:>15.4f}")
         print(f"{'Avg Duration (bars)':<25} {result.avg_trade_duration:>15.1f}")
         print(f"\n{'Final Capital':<25} ${self.capital:>14,.2f}")
         print(f"{'Initial Capital':<25} ${self.initial_capital:>14,.2f}")

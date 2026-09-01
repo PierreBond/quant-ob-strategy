@@ -1,7 +1,9 @@
 # Trading Bot Configuration
 # =========================
 # Edit these settings for your environment
+# API keys are loaded from environment variables (see .env.example)
 
+import os
 from enum import Enum
 from typing import Optional
 from dataclasses import dataclass
@@ -15,8 +17,8 @@ EXCHANGE = "binance"  # binance, coinbase, kraken, etc.
 SYMBOL = "BTC/USDT"
 TIMEFRAME = "15m"  # 1m, 5m, 15m, 1h, 4h, 1d
 
-api_key = "bnc_api_key"
-api_secret = "bnc_api_secrt"
+api_key = os.environ.get("BINANCE_API_KEY", "")
+api_secret = os.environ.get("BINANCE_API_SECRET", "")
 
 # Sandbox/Test mode (recommended for testing)
 TESTNET = True
@@ -92,9 +94,9 @@ class RiskConfig:
 @dataclass
 class NotificationConfig:
     """Notification settings"""
-    TELEGRAM_ENABLED = True
-    TELEGRAM_TOKEN = "telegram_token"
-    TELEGRAM_CHAT_ID = "telegram_id"
+    TELEGRAM_ENABLED = bool(os.environ.get("TELEGRAM_TOKEN", ""))
+    TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
+    TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
     EMAIL_ENABLED: bool = False
     EMAIL_SMTP_SERVER: Optional[str] = None

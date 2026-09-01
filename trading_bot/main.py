@@ -23,54 +23,10 @@ import json
 import pandas as pd
 import numpy as np
 
-# Import modules - handle both package and standalone imports
-try:
-    from config.settings import get_config, TradingConfig
-except ImportError:
-    TradingConfig = None
-    def get_config(env="paper"):
-        return {}
-
-try:
-    from data.market_data import DataManager, add_indicators
-except ImportError:
-    def DataManager():
-        return None
-
-    def add_indicators(df):
-        return df
-
-try:
-    from backtest.engine import BacktestEngine, SMAStrategy
-except ImportError:
-    class BacktestEngine:
-        def __init__(self, **kwargs):
-            pass
-        def run(self, *args, **kwargs):
-            return None
-
-    class SMAStrategy:
-        pass
-
-try:
-    from strategies.orderblock import OrderBlockStrategy, OrderBlockStrategyAll, OrderBlockStrategyInverse, OrderBlockStrategyPremium, OrderBlockStrategyPremiumV2, OrderBlockStrategyPremiumV3, SimpleSMACrossover, RSIStrategy
-except ImportError:
-    class OrderBlockStrategy:
-        pass
-    class OrderBlockStrategyAll:
-        pass
-    class OrderBlockStrategyInverse:
-        pass
-    class OrderBlockStrategyPremium:
-        pass
-    class OrderBlockStrategyPremiumV2:
-        pass
-    class OrderBlockStrategyPremiumV3:
-        pass
-    class SimpleSMACrossover:
-        pass
-    class RSIStrategy:
-        pass
+from config.settings import get_config, TradingConfig
+from data.market_data import DataManager, add_indicators
+from backtest.engine import BacktestEngine, SMAStrategy
+from strategies.orderblock import OrderBlockStrategy, OrderBlockStrategyAll, OrderBlockStrategyInverse, OrderBlockStrategyPremium, OrderBlockStrategyPremiumV2, OrderBlockStrategyPremiumV3, SimpleSMACrossover, RSIStrategy
 
 
 def generate_sample_data(days: int = 60, start_price: float = 90000) -> pd.DataFrame:
@@ -104,18 +60,33 @@ def generate_sample_data(days: int = 60, start_price: float = 90000) -> pd.DataF
     return df
 
 
+def _get_cache_path(symbol: str, timeframe: str, start_time: datetime, end_time: datetime) -> str:
+    """Generate a deterministic cache file path for a given data request."""
+    safe_symbol = symbol.replace('/', '').replace(':', '')
+    start_str = start_time.strftime('%Y%m%d_%H%M')
+    end_str = end_time.strftime('%Y%m%d_%H%M')
+    return os.path.join('cache', f'{safe_symbol}_{timeframe}_{start_str}_to_{end_str}.csv')
+
+
 def fetch_real_data(symbol: str = "BTC/USDT", 
                     days: int = 60, 
                     timeframe: str = "15m",
-                    exchange_id: str = "binance") -> pd.DataFrame:
+                    exchange_id: str = "binance",
+                    start_date: str = None,
+                    end_date: str = None,
+                    no_cache: bool = False) -> pd.DataFrame:
     """
-    Fetch real OHLCV data from exchange using CCXT
+    Fetch real OHLCV data from exchange using CCXT.
+    Caches data to cache/ for reproducibility.
     
     Args:
         symbol: Trading pair (e.g., "BTC/USDT")
-        days: Number of days of historical data
+        days: Number of days of historical data (ignored if start_date is set)
         timeframe: Candle timeframe (1m, 5m, 15m, 1h, 4h, 1d)
         exchange_id: Exchange to fetch from (binance, bybit, etc.)
+        start_date: Explicit start date. Supports YYYY-MM-DD or 'YYYY-MM-DD HH:MM'. Overrides --days.
+        end_date: Explicit end date. Supports YYYY-MM-DD or 'YYYY-MM-DD HH:MM'. Defaults to now.
+        no_cache: If True, skip cache and always fetch fresh data.
     
     Returns:
         DataFrame with OHLCV data
@@ -128,6 +99,42 @@ def fetch_real_data(symbol: str = "BTC/USDT",
         subprocess.run(["pip", "install", "ccxt", "-q"])
         import ccxt
     
+    def parse_date(s):
+        """Parse date string, supporting both YYYY-MM-DD and YYYY-MM-DD HH:MM formats."""
+        for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(s, fmt)
+            except ValueError:
+                continue
+        raise ValueError(f"Cannot parse date '{s}'. Use YYYY-MM-DD or 'YYYY-MM-DD HH:MM'")
+    
+    # Calculate time range first (needed for cache lookup)
+    if start_date:
+        start_time = parse_date(start_date)
+    else:
+        start_time = datetime.now() - timedelta(days=days)
+    
+    if end_date:
+        parsed_end = parse_date(end_date)
+        # If only a date was given (no time component), include the full day
+        if len(end_date.strip()) <= 10:
+            end_time = parsed_end + timedelta(days=1)
+        else:
+            end_time = parsed_end
+    else:
+        end_time = datetime.now()
+    
+    # Check cache first
+    os.makedirs('cache', exist_ok=True)
+    cache_path = _get_cache_path(symbol, timeframe, start_time, end_time)
+    
+    if not no_cache and os.path.exists(cache_path):
+        print(f"Loading cached data from {cache_path}")
+        df = pd.read_csv(cache_path, index_col='timestamp', parse_dates=True)
+        df = df.astype(float)
+        print(f"\u2713 Loaded {len(df)} cached candles ({df.index[0]} to {df.index[-1]})")
+        return df
+    
     print(f"Connecting to {exchange_id}...")
     
     # Initialize exchange
@@ -137,9 +144,6 @@ def fetch_real_data(symbol: str = "BTC/USDT",
         'timeout': 30000,
     })
     
-    # Calculate time range
-    end_time = datetime.now()
-    start_time = end_time - timedelta(days=days)
     since = int(start_time.timestamp() * 1000)
     
     # Timeframe to milliseconds
@@ -199,6 +203,19 @@ def fetch_real_data(symbol: str = "BTC/USDT",
     df = df[~df.index.duplicated(keep='first')]
     df.sort_index(inplace=True)
     
+    # Trim to requested time range (important for --start-date / --end-date)
+    if start_date:
+        df = df[df.index >= start_time]
+    if end_date:
+        df = df[df.index <= end_time]
+    
+    # Save to cache for reproducibility
+    try:
+        df.to_csv(cache_path)
+        print(f"\u2713 Cached {len(df)} candles to {cache_path}")
+    except Exception as e:
+        print(f"Warning: Could not cache data: {e}")
+    
     return df
 
 
@@ -215,14 +232,20 @@ def run_backtest(symbol: str = "BTC/USDT",
                  use_circuit_breaker: bool = True,
                  use_kelly: bool = True,
                  use_order_flow: bool = False,
-                 strict_order_flow: bool = False):
+                 strict_order_flow: bool = False,
+                 start_date: str = None,
+                 end_date: str = None,
+                 no_cache: bool = False):
     """Run backtest with optional Phase 1 risk management"""
 
     print(f"\n{'='*60}")
     print(f"BACKTEST MODE")
     print(f"{'='*60}")
     print(f"Symbol: {symbol}")
-    print(f"Days: {days}")
+    if start_date:
+        print(f"Date Range: {start_date} to {end_date or 'now'}")
+    else:
+        print(f"Days: {days}")
     print(f"Strategy: {strategy_name}")
     print(f"Initial Capital: ${initial_capital:,.2f}")
     print(f"Data Source: {'Real (' + exchange + ')' if use_real_data else 'Simulated'}")
@@ -249,7 +272,8 @@ def run_backtest(symbol: str = "BTC/USDT",
     # Load data
     print("Loading data...")
     if use_real_data:
-        df = fetch_real_data(symbol=symbol, days=days, timeframe=timeframe, exchange_id=exchange)
+        df = fetch_real_data(symbol=symbol, days=days, timeframe=timeframe, exchange_id=exchange,
+                                start_date=start_date, end_date=end_date, no_cache=no_cache)
         print(f"Data range: {df.index[0]} to {df.index[-1]}")
         print(f"Price range: ${df['low'].min():,.2f} - ${df['high'].max():,.2f}")
     else:
@@ -398,11 +422,15 @@ def get_strategy_instance(strategy_name: str, timeframe: str = "15m"):
             tp_rr_mult=2.5,
             require_fvg=True,
             require_displacement=True,
-            max_age_bars=150,
+            max_age_bars=50,
             mss_confirmation_bars=20,
+            require_ob_mss=False,
+            first_retest_only=False,
             use_trend_filter=True,
             ema_fast=50,
             ema_slow=200,
+            use_longterm_filter=True,
+            longterm_period=1000,
             use_dynamic_rr=True,
             low_vol_threshold=1.0,
             high_vol_threshold=2.0,
@@ -410,7 +438,7 @@ def get_strategy_instance(strategy_name: str, timeframe: str = "15m"):
             partial_tp_percent=0.5,
             tp1_rr_mult=1.5,
             tp2_rr_mult=3.0,
-            sl_atr_buffer=0.5,
+            sl_atr_buffer=1.0,
             position_size=0.5
         )
     elif strategy_name == "orderblock_premium_v3":
@@ -420,16 +448,17 @@ def get_strategy_instance(strategy_name: str, timeframe: str = "15m"):
             require_fvg=True,
             require_displacement=True,
             mss_confirmation_bars=20,
+            first_retest_only=False,
             # TIME-BASED SETTINGS
             aggressive_days=30,
             timeframe_minutes=tf_minutes,
             # AGGRESSIVE MODE (Days 1-30)
             aggressive_max_age=500,
-            aggressive_rr=3.0,
-            aggressive_sl_buffer=0.3,
+            aggressive_rr=4.0,
+            aggressive_sl_buffer=1.0,
             # CONSERVATIVE MODE (Days 31+)
             conservative_max_age=150,
-            conservative_sl_buffer=0.5,
+            conservative_sl_buffer=1.0,
             # Trend Filter (V2 mode only)
             ema_fast=50,
             ema_slow=200,
@@ -648,8 +677,8 @@ def print_last_orderblocks(symbol: str = "BTC/USDT",
 
     # Initialize strategy
     strategy = OrderBlockStrategy(
-        input_range=25,
-        min_risk_reward=1.5,
+            input_range=25,
+            min_risk_reward=1.5,
         sl_atr_mult=2.0,
         tp_rr_mult=2.0,
         first_retest_only=False
@@ -1289,8 +1318,12 @@ def main():
     parser.add_argument('--symbol', type=str, default='BTC/USDT',
                         help='Trading symbol (e.g., BTC/USDT, ETH/USDT)')
     parser.add_argument('--days', type=int, default=60,
-                        help='Days of data')
-    parser.add_argument('--strategy', type=str, default='orderblock',
+                        help='Days of data (ignored if --start-date is set)')
+    parser.add_argument('--start-date', type=str, default=None,
+                        help='Start date (YYYY-MM-DD or "YYYY-MM-DD HH:MM"). Overrides --days.')
+    parser.add_argument('--end-date', type=str, default=None,
+                        help='End date (YYYY-MM-DD or "YYYY-MM-DD HH:MM"). Defaults to now.')
+    parser.add_argument('--strategy', type=str, default='orderblock_premium_v2',
                         choices=['orderblock', 'orderblock_all', 'orderblock_inverse', 'orderblock_premium', 'orderblock_premium_v2', 'orderblock_premium_v3', 'sma'],
                         help='Strategy: orderblock, orderblock_premium (v1), orderblock_premium_v2 (trend filter), orderblock_premium_v3 (adaptive hybrid), sma')
     parser.add_argument('--capital', type=float, default=10000,
@@ -1323,6 +1356,8 @@ def main():
                         help='Enable order flow analysis: CVD, Open Interest, whale detection (used with --risk-mgmt)')
     parser.add_argument('--strict-order-flow', action='store_true',
                         help='Strict order flow filtering - block on moderate signals (used with --use-order-flow)')
+    parser.add_argument('--no-cache', action='store_true',
+                        help='Skip data cache and always fetch fresh candles from exchange')
     
     # VectorBT flags
     parser.add_argument('--no-trend-filter', action='store_true',
@@ -1353,7 +1388,10 @@ def main():
             use_circuit_breaker=not args.no_circuit_breaker,
             use_kelly=not args.no_kelly,
             use_order_flow=args.use_order_flow,
-            strict_order_flow=args.strict_order_flow
+            strict_order_flow=args.strict_order_flow,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            no_cache=args.no_cache
         )
     elif args.mode == 'live':
         run_live(

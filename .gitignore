@@ -4,8 +4,5 @@ __pycache__/
 *.pyc
 *.csv
 *.png
+*.json
 telegram_config.json
-trading_bot/results/backtest_20260126_174308.json
-.json
-IMPLEMENTATION_SUMMARY.md
-README.md
