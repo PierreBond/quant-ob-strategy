@@ -60,6 +60,7 @@ Algorithmic OB trading strategy for BTC/USDT — walk-forward validated, volatil
 |---|---|
 | Vol filter (ATR% 0.8–2.5) | **Winner** — +11.49% single, +13.00% WF |
 | Tight SL (1.5x ATR) | **Winner** — more trades, higher Sharpe, lower DD |
+| Trailing stop (activate 3.0x, trail 0.5x) | **Optional** — +13.22% single, +2.48% WF avg, higher returns but more WF gap |
 | HMM regime | Failed — -17.18% WF |
 | EWMA vol sizing | Failed — -2.54% WF |
 | ADX filter | Hurts performance |
@@ -105,8 +106,16 @@ RegimeFilteredOB(
     use_vol_filter=True,
     min_atr_pct=0.8,         # Min ATR% to enter
     max_atr_pct=2.5,         # Max ATR% to enter
+    # Optional trailing stop (disabled by default):
+    # use_trailing_stop=True,
+    # trail_activate_atr=3.0,  # Activate at 3.0x ATR profit
+    # trail_distance_atr=0.5,  # Trail at 0.5x ATR below best
 )
 ```
+
+### Trailing Stop (Optional)
+
+Activates after 3.0x ATR profit, trails 0.5x ATR below the best price. Locks in ~2.5R minimum on winning trades. Higher returns (+13.22% vs +11.49%) but slightly higher WF gap (0.81 vs -0.06).
 
 ---
 
@@ -292,4 +301,4 @@ This software is for educational purposes only. Trading cryptocurrencies involve
 
 ---
 
-**Version:** 2.1
+**Version:** 2.2

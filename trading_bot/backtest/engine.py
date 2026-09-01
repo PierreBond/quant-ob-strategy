@@ -201,14 +201,20 @@ class BacktestEngine:
                  slippage_percent: float = 0.0005,  # 0.05% slippage
                  max_position_size: float = 1.0,  # 100% of capital
                  enable_journal: bool = True,  # Enable trade journaling
-                 risk_manager=None):  # Phase 1 Risk Manager
+                 risk_manager=None,  # Phase 1 Risk Manager
+                 use_trailing_stop: bool = False,
+                 trail_activate_atr: float = 1.5,
+                 trail_distance_atr: float = 1.0):
         self.initial_capital = initial_capital
         self.fee_percent = fee_percent
         self.slippage_percent = slippage_percent
         self.max_position_size = max_position_size
         self.enable_journal = enable_journal
         self.risk_manager = risk_manager  # Phase 1 Risk Manager
-        
+        self.use_trailing_stop = use_trailing_stop
+        self.trail_activate_atr = trail_activate_atr
+        self.trail_distance_atr = trail_distance_atr
+
         # Initialize filter analyzer for rejection tracking
         self.filter_analyzer = None
         try:
@@ -225,6 +231,7 @@ class BacktestEngine:
         self.entry_bar_idx = 0  # Track bar index for duration calculation
         self.journal = None  # Trade journal instance
         self.entry_order = None
+        self.trail_best_price = 0.0
         
         # Risk management stats
         self.trades_filtered_by_risk = 0
@@ -439,9 +446,9 @@ class BacktestEngine:
         self.orders.append(order)
 
         # Open position
-        self._open_position(order, row)
+        self._open_position(order, row, signal)
 
-    def _open_position(self, order: Order, row: pd.Series):
+    def _open_position(self, order: Order, row: pd.Series, signal: Dict = None):
         """Open a position"""
         # Apply fee
         fee = order.quantity * order.filled_price * self.fee_percent
@@ -453,6 +460,8 @@ class BacktestEngine:
         self.entry_time = order.filled_time
         self.entry_bar_idx = self.current_bar_idx  # Store bar index for duration
         self.entry_order = order
+        self.trail_best_price = order.filled_price
+        self.entry_atr = signal.get('atr', 0.0) if signal else 0.0
         
         # Log trade entry to journal
         if self.journal:
@@ -558,6 +567,25 @@ class BacktestEngine:
 
         sl = self.entry_order.stop_loss
         tp = self.entry_order.take_profit
+
+        if self.use_trailing_stop and self.entry_atr > 0:
+            atr = self.entry_atr
+            if self.position == PositionSide.LONG:
+                if row['high'] > self.trail_best_price:
+                    self.trail_best_price = row['high']
+                profit = self.trail_best_price - self.entry_price
+                if profit >= atr * self.trail_activate_atr:
+                    new_sl = self.trail_best_price - atr * self.trail_distance_atr
+                    if sl is None or new_sl > sl:
+                        sl = new_sl
+            else:  # SHORT
+                if row['low'] < self.trail_best_price:
+                    self.trail_best_price = row['low']
+                profit = self.entry_price - self.trail_best_price
+                if profit >= atr * self.trail_activate_atr:
+                    new_sl = self.trail_best_price + atr * self.trail_distance_atr
+                    if sl is None or new_sl < sl:
+                        sl = new_sl
 
         if self.position == PositionSide.LONG:
             if sl and row['low'] <= sl:

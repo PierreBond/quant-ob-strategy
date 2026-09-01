@@ -21,7 +21,10 @@ class RegimeFilteredOB(OrderBlockStrategy):
                  max_atr_pct: float = 2.5,
                  use_adx_filter: bool = True,
                  adx_period: int = 14,
-                 adx_threshold: float = 25.0):
+                 adx_threshold: float = 25.0,
+                 use_trailing_stop: bool = False,
+                 trail_activate_atr: float = 1.5,
+                 trail_distance_atr: float = 1.0):
 
         super().__init__(
             name=name, input_range=input_range,
@@ -38,6 +41,9 @@ class RegimeFilteredOB(OrderBlockStrategy):
         self.use_adx_filter = use_adx_filter
         self.adx_period = adx_period
         self.adx_threshold = adx_threshold
+        self.use_trailing_stop = use_trailing_stop
+        self.trail_activate_atr = trail_activate_atr
+        self.trail_distance_atr = trail_distance_atr
 
     def _init_state(self):
         super()._init_state()
@@ -129,7 +135,8 @@ class RegimeFilteredOB(OrderBlockStrategy):
                 return {'signal': 'LONG', 'sl': sl, 'tp': tp, 'size': sz,
                         'ob_index': ob.index, 'ob_type': 'bullish',
                         'ob_state': 'mitigated' if is_mit else 'active',
-                        'retest_count': self.ob_retest_counts[ob.index]}
+                        'retest_count': self.ob_retest_counts[ob.index],
+                        'atr': atr}
 
         for ob in self.short_obs:
             if not self.use_mitigated_blocks and ob.state == OBState.MITIGATED.value:
@@ -153,6 +160,7 @@ class RegimeFilteredOB(OrderBlockStrategy):
                 return {'signal': 'SHORT', 'sl': sl, 'tp': tp, 'size': sz,
                         'ob_index': ob.index, 'ob_type': 'bearish',
                         'ob_state': 'mitigated' if is_mit else 'active',
-                        'retest_count': self.ob_retest_counts[ob.index]}
+                        'retest_count': self.ob_retest_counts[ob.index],
+                        'atr': atr}
 
         return {'signal': 'FLAT', 'sl': None, 'tp': None, 'size': 0.0}
