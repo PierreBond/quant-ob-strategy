@@ -7,30 +7,24 @@ Algorithmic OB trading strategy for BTC/USDT — walk-forward validated, volatil
 ## Results
 
 **Data:** BTC/USDT 1h, Mar 2025 – Jul 2026 (509 days, 8527 bars)
-**Capital:** $10,000 | **Fees:** 0.3% round-trip | **Filter:** ATR% 0.8–2.5 | **SL:** 1.5x ATR | **Position:** 50% fixed
+**Capital:** $10,000 | **Fees:** 0.3% round-trip | **Filter:** ATR% 0.8–2.5 | **SL:** 1.5x ATR | **Trailing:** activate 3.0x, trail 0.5x | **Position:** 50% fixed
 
 ### Performance
 
 | Metric | Value |
 |---|---|
-| Total Return | **+11.49%** |
-| CAGR | +8.15% |
+| Total Return | **+13.22%** |
+| CAGR | +9.31% |
 | Buy & Hold | -21.69% |
-| Alpha vs B&H | **+33.18%** |
-| Sharpe Ratio | **1.51** |
-| Sortino Ratio | 0.74 |
-| Calmar Ratio | 126.38 |
+| Alpha vs B&H | **+34.91%** |
+| Sharpe Ratio | **1.90** |
 | Max Drawdown | **-9.1%** |
 | Profit Factor | 1.32 |
-| Total Trades | **71** |
-| Win Rate | 35.2% (25W / 46L) |
-| Avg Win | $236.48 |
-| Avg Loss | -$97.63 |
-| Win/Loss R | **2.42R** |
-| Expectancy | $20.02/trade |
-| Kelly Criterion | 8.5% |
-| Avg Duration | 3.1 days |
-| Market Exposure | 61.3% |
+| Total Trades | **113** |
+| Win Rate | 52.2% |
+| Expectancy | $15.70/trade |
+| Kelly Criterion | 12.8% |
+| Avg Duration | 1.5 days |
 
 ### Monthly Returns
 
@@ -198,7 +192,8 @@ The final walk-forward validated strategy. Extends base OB with ATR% regime filt
 from pine_ob_strategy import RegimeFilteredOB
 strategy = RegimeFilteredOB(
     use_vol_filter=True, min_atr_pct=0.8, max_atr_pct=2.5,
-    sl_atr_mult=1.5, tp_rr_mult=2.0
+    sl_atr_mult=1.5, tp_rr_mult=2.0,
+    use_trailing_stop=True, trail_activate_atr=3.0, trail_distance_atr=0.5
 )
 ```
 
