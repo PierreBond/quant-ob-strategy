@@ -1,9 +1,0 @@
-{
-  "avg_train_sharpe": -4.1739882541488145,
-  "avg_test_sharpe": -5.357420156668037,
-  "avg_overfitting_gap": 1.1834319025192226,
-  "total_test_return": -0.02832323080212995,
-  "is_robust": "False",
-  "robustness_score": -59.95830867985865,
-  "num_windows": 1
-}
