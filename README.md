@@ -7,24 +7,27 @@ Algorithmic OB trading strategy for BTC/USDT — walk-forward validated, volatil
 ## Results
 
 **Data:** BTC/USDT 1h, Mar 2025 – Jul 2026 (509 days, 8527 bars)
-**Capital:** $10,000 | **Fees:** 0.3% round-trip | **Filter:** ATR% 0.8–2.5 | **SL:** 1.5x ATR | **Trailing:** activate 3.0x, trail 0.5x | **Position:** 50% fixed
+**Capital:** $10,000 | **Fees:** 0.3% round-trip | **Filter:** ATR% 0.8–2.5 | **SL:** 2.0x ATR | **Trailing:** activate 3.0x, trail 0.5x | **Position:** 50% fixed
 
 ### Performance
 
 | Metric | Value |
 |---|---|
-| Total Return | **+13.22%** |
-| CAGR | +9.31% |
+| Total Return | **+15.56%** |
+| CAGR | +10.93% |
 | Buy & Hold | -21.69% |
-| Alpha vs B&H | **+34.91%** |
-| Sharpe Ratio | **1.90** |
-| Max Drawdown | **-9.1%** |
-| Profit Factor | 1.32 |
-| Total Trades | **113** |
-| Win Rate | 52.2% |
-| Expectancy | $15.70/trade |
-| Kelly Criterion | 12.8% |
-| Avg Duration | 1.5 days |
+| Alpha vs B&H | **+37.25%** |
+| Sharpe Ratio | **1.06** |
+| Sortino Ratio | 0.97 |
+| Calmar Ratio | 1.28 |
+| Max Drawdown | **-8.5%** |
+| Profit Factor | 1.37 |
+| Total Trades | **99** |
+| Win Rate | 57.6% |
+| Win/Loss R | 1.01R |
+| Expectancy | $19.66/trade |
+| Kelly Criterion | 15.6% |
+| Avg Duration | 1.9 days |
 
 ### Monthly Returns
 
@@ -34,27 +37,28 @@ Algorithmic OB trading strategy for BTC/USDT — walk-forward validated, volatil
 | Best Month | +5.23% |
 | Worst Month | -3.28% |
 
-### Walk-Forward (10 windows, 60d train / 30d test)
+### Walk-Forward (11-window expanding)
 
 | Metric | Value |
 |---|---|
-| Compounded | **+13.00%** |
-| Avg Test Sharpe | 1.00 |
-| Overfit Gap | **0.06** |
-| Beats B&H | 5/10 windows |
+| Compounded (50% sizing) | **+16.34%** |
+| Compounded (15% sizing) | +4.90% |
+| Avg Test Sharpe | 3.42 |
+| Overfit Gap | **-0.14** (no overfitting) |
+| Beats B&H | 7/11 windows |
 
 ### Statistical Significance
 
-- t-stat: **12.71** (>2.0 threshold) — statistically significant
-- 71 trades (approaching 100 minimum)
+- t-stat: **1.05**
+- 99 trades
 
 ### Filters Tested
 
 | Filter | Result |
 |---|---|
-| Vol filter (ATR% 0.8–2.5) | **Winner** — +11.49% single, +13.00% WF |
-| Tight SL (1.5x ATR) | **Winner** — more trades, higher Sharpe, lower DD |
-| Trailing stop (activate 3.0x, trail 0.5x) | **Optional** — +13.22% single, +2.48% WF avg, higher returns but more WF gap |
+| Vol filter (ATR% 0.8–2.5) | **Winner** — +15.56% single, +16.34% WF |
+| Tight SL (2.0x ATR) | **Winner** — more trades survive to trailing stop |
+| Trailing stop (activate 3.0x, trail 0.5x) | **Winner** — +6.56% WF improvement |
 | HMM regime | Failed — -17.18% WF |
 | EWMA vol sizing | Failed — -2.54% WF |
 | ADX filter | Hurts performance |
@@ -92,7 +96,7 @@ The core logic is simple: when price creates a Break of Structure (BOS), it leav
 RegimeFilteredOB(
     input_range=25,          # Swing detection window
     min_risk_reward=1.5,     # Minimum R:R to enter
-    sl_atr_mult=1.5,         # SL = 1.5x ATR from OB edge (tight)
+    sl_atr_mult=2.0,         # SL = 2.0x ATR from OB edge
     tp_rr_mult=2.0,          # TP = 2x risk
     max_age_bars=1000,       # OB expiry
     position_size=0.5,       # 50% of capital
@@ -100,16 +104,11 @@ RegimeFilteredOB(
     use_vol_filter=True,
     min_atr_pct=0.8,         # Min ATR% to enter
     max_atr_pct=2.5,         # Max ATR% to enter
-    # Optional trailing stop (disabled by default):
-    # use_trailing_stop=True,
-    # trail_activate_atr=3.0,  # Activate at 3.0x ATR profit
-    # trail_distance_atr=0.5,  # Trail at 0.5x ATR below best
+    use_trailing_stop=True,
+    trail_activate_atr=3.0,  # Activate at 3.0x ATR profit
+    trail_distance_atr=0.5,  # Trail at 0.5x ATR below best
 )
 ```
-
-### Trailing Stop (Optional)
-
-Activates after 3.0x ATR profit, trails 0.5x ATR below the best price. Locks in ~2.5R minimum on winning trades. Higher returns (+13.22% vs +11.49%) but slightly higher WF gap (0.81 vs -0.06).
 
 ---
 
@@ -296,4 +295,4 @@ This software is for educational purposes only. Trading cryptocurrencies involve
 
 ---
 
-**Version:** 2.2
+**Version:** 2.3
