@@ -24,7 +24,10 @@ class RegimeFilteredOB(OrderBlockStrategy):
                  adx_threshold: float = 25.0,
                  use_trailing_stop: bool = False,
                  trail_activate_atr: float = 1.5,
-                 trail_distance_atr: float = 1.0):
+                 trail_distance_atr: float = 1.0,
+                 use_ofi_filter: bool = False,
+                 ofi_window: int = 10,
+                 ofi_threshold: float = 0.0):
 
         super().__init__(
             name=name, input_range=input_range,
@@ -44,6 +47,9 @@ class RegimeFilteredOB(OrderBlockStrategy):
         self.use_trailing_stop = use_trailing_stop
         self.trail_activate_atr = trail_activate_atr
         self.trail_distance_atr = trail_distance_atr
+        self.use_ofi_filter = use_ofi_filter
+        self.ofi_window = ofi_window
+        self.ofi_threshold = ofi_threshold
 
     def _init_state(self):
         super()._init_state()
@@ -53,6 +59,13 @@ class RegimeFilteredOB(OrderBlockStrategy):
         df = df.copy()
         df['atr'] = self._calculate_atr(df, 14)
         df['atr_pct'] = (df['atr'] / df['close']) * 100
+
+        if self.use_ofi_filter:
+            hl_range = df['high'] - df['low']
+            hl_range = hl_range.replace(0, np.nan)
+            df['buy_vol'] = df['volume'] * (df['close'] - df['low']) / hl_range
+            df['sell_vol'] = df['volume'] * (df['high'] - df['close']) / hl_range
+            df['ofi'] = (df['buy_vol'] - df['sell_vol']).rolling(self.ofi_window).sum()
 
         if self.use_adx_filter:
             high = df['high']; low = df['low']; close = df['close']
@@ -94,6 +107,11 @@ class RegimeFilteredOB(OrderBlockStrategy):
             atr_pct = current.get('atr_pct', 1.5)
             if pd.isna(atr_pct) or atr_pct < self.min_atr_pct or atr_pct > self.max_atr_pct:
                 return False, 0
+        if self.use_ofi_filter:
+            ofi = current.get('ofi', 0)
+            if pd.isna(ofi):
+                return True, 0
+            return True, 1 if ofi > self.ofi_threshold else -1
         if self.use_adx_filter:
             adx = current.get('adx', 0)
             if pd.isna(adx) or adx < self.adx_threshold:

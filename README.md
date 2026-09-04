@@ -1,33 +1,26 @@
 # Volatility-Filtered Order Block Strategy
 
-Algorithmic OB trading strategy for BTC/USDT — walk-forward validated, volatility-filtered, outperforming buy-and-hold by +33%.
+Algorithmic OB trading strategy for BTC/USDT — walk-forward validated, volatility-filtered + OFI filter, outperforming buy-and-hold by +48%.
 
 ---
 
 ## Results
 
 **Data:** BTC/USDT 1h, Mar 2025 – Jul 2026 (509 days, 8527 bars)
-**Capital:** $10,000 | **Fees:** 0.3% round-trip | **Filter:** ATR% 0.8–2.5 | **SL:** 2.0x ATR | **Trailing:** activate 3.0x, trail 0.5x | **Position:** 50% fixed
+**Capital:** $10,000 | **Fees:** 0.3% round-trip | **Filter:** ATR% 0.8–2.5 + OFI w=4 | **SL:** 2.0x ATR | **Trailing:** activate 3.0x, trail 0.5x | **Position:** 50% fixed
 
 ### Performance
 
 | Metric | Value |
 |---|---|
-| Total Return | **+15.56%** |
-| CAGR | +10.93% |
+| Total Return | **+26.00%** |
+| CAGR | +17.89% |
 | Buy & Hold | -21.69% |
-| Alpha vs B&H | **+37.25%** |
-| Sharpe Ratio | **1.06** |
-| Sortino Ratio | 0.97 |
-| Calmar Ratio | 1.28 |
-| Max Drawdown | **-8.5%** |
-| Profit Factor | 1.37 |
-| Total Trades | **99** |
-| Win Rate | 57.6% |
-| Win/Loss R | 1.01R |
-| Expectancy | $19.66/trade |
-| Kelly Criterion | 15.6% |
-| Avg Duration | 1.9 days |
+| Alpha vs B&H | **+47.69%** |
+| Profit Factor | **1.71** |
+| Total Trades | **82** |
+| Win Rate | **61.0%** |
+| Max Drawdown | **-9.7%** |
 
 ### Monthly Returns
 
@@ -37,33 +30,34 @@ Algorithmic OB trading strategy for BTC/USDT — walk-forward validated, volatil
 | Best Month | +5.23% |
 | Worst Month | -3.28% |
 
-### Walk-Forward (11-window expanding)
+### Walk-Forward (13-window expanding)
 
 | Metric | Value |
 |---|---|
-| Compounded (50% sizing) | **+16.34%** |
-| Compounded (15% sizing) | +4.90% |
-| Avg Test Sharpe | 3.42 |
-| Overfit Gap | **-0.14** (no overfitting) |
-| Beats B&H | 7/11 windows |
+| Compounded Return | **+26.36%** |
+| Avg Profit Factor | 1.61 |
+| Final Window PF | 1.71 |
+| Beats B&H | 9/13 windows |
 
 ### Statistical Significance
 
-- t-stat: **1.05**
-- 99 trades
+- 82 trades
+- Monte Carlo (10K sims): mean +29.34%, P(negative) 1.9%, P(DD>15%) 0.1%
 
 ### Filters Tested
 
 | Filter | Result |
 |---|---|
-| Vol filter (ATR% 0.8–2.5) | **Winner** — +15.56% single, +16.34% WF |
+| Vol filter (ATR% 0.8–2.5) | **Winner** — filters noise, improves WR |
+| OFI filter (w=4, thresh=100) | **Winner** — +10.44% return, +3.4% WR, +0.34 PF |
 | Tight SL (2.0x ATR) | **Winner** — more trades survive to trailing stop |
-| Trailing stop (activate 3.0x, trail 0.5x) | **Winner** — +6.56% WF improvement |
+| Trailing stop (activate 3.0x, trail 0.5x) | **Winner** — captures momentum |
 | HMM regime | Failed — -17.18% WF |
 | EWMA vol sizing | Failed — -2.54% WF |
 | ADX filter | Hurts performance |
+| EMA directional (50/100/200) | Hurts performance in all configs |
+| SMA50 regime detection | Failed — 33% alignment (worse than random) |
 | Relaxed vol (0.5–3.0%) | Failed — adds noise |
-| No vol filter | Failed — -6.62% |
 
 ---
 
@@ -78,17 +72,25 @@ The core logic is simple: when price creates a Break of Structure (BOS), it leav
 2. Record the Order Block (last opposing candle before break)
 3. Wait for price to retest the OB
 4. **Vol filter:** Only enter if ATR% is between 0.8% and 2.5%
-5. Enter on retest with SL at 1.5x ATR beyond OB + TP at 2.0R
+5. **OFI filter:** Only enter if order flow confirms direction (buyers for longs, sellers for shorts)
+6. Enter on retest with SL at 2.0x ATR beyond OB + TP at 2.0R
 
 **Why the vol filter works:**
 - In low vol (<0.8%), OBs are noise — price meanders through without conviction
 - In high vol (>2.5%), OBs get destroyed by momentum — SL gets hit before price can reverse
 - The sweet spot (0.8–2.5%) is where institutional order flow respects structure
 
+**Why the OFI filter works:**
+- Measures net buying/selling pressure using volume delta (tick rule)
+- Skips shorts when buyers are in control (OFI > 100)
+- Skips longs when sellers are in control (OFI < -100)
+- Based on Cont-Kukanov-Stoikov 2014: order flow predicts price better than volume alone
+- Window=4 captures short-term pressure without lag
+
 **Why tight SL works:**
-- Frees capital faster — trades that would linger at 2.0x ATR exit quickly at 1.5x ATR
+- Frees capital faster — trades that would linger exit quickly at 2.0x ATR
 - More trades = more opportunities to compound
-- Lower win rate (35% vs 45%) but much higher R:R (2.42R vs 1.51R) compensates
+- Lower win rate but much higher R:R compensates
 
 ### Parameters
 
@@ -104,6 +106,9 @@ RegimeFilteredOB(
     use_vol_filter=True,
     min_atr_pct=0.8,         # Min ATR% to enter
     max_atr_pct=2.5,         # Max ATR% to enter
+    use_ofi_filter=True,     # Order flow imbalance filter
+    ofi_window=4,            # Rolling window for OFI
+    ofi_threshold=100,       # Min OFI to allow entry
     use_trailing_stop=True,
     trail_activate_atr=3.0,  # Activate at 3.0x ATR profit
     trail_distance_atr=0.5,  # Trail at 0.5x ATR below best
@@ -186,12 +191,13 @@ python trading_bot/main.py --strategy orderblock_all
 ```
 
 ### Volatility-Filtered OB (`pine_ob_strategy.py`)
-The final walk-forward validated strategy. Extends base OB with ATR% regime filter and tight SL. Used for all benchmark results above.
+The final walk-forward validated strategy. Extends base OB with ATR% regime filter, OFI filter, and tight SL. Used for all benchmark results above.
 ```python
 from pine_ob_strategy import RegimeFilteredOB
 strategy = RegimeFilteredOB(
     use_vol_filter=True, min_atr_pct=0.8, max_atr_pct=2.5,
-    sl_atr_mult=1.5, tp_rr_mult=2.0,
+    sl_atr_mult=2.0, tp_rr_mult=2.0,
+    use_ofi_filter=True, ofi_window=4, ofi_threshold=100,
     use_trailing_stop=True, trail_activate_atr=3.0, trail_distance_atr=0.5
 )
 ```
@@ -200,12 +206,13 @@ strategy = RegimeFilteredOB(
 
 ## Walk-Forward
 
-10-window walk-forward validation (60-day train / 30-day test):
+13-window expanding walk-forward validation (OFI w=4, t=100):
 
-- **Compounded return:** +13.00%
-- **Average test Sharpe:** 1.00
-- **Overfit gap:** 0.06 (near-zero overfitting)
-- **Beats buy-and-hold:** 5/10 windows
+- **Compounded return:** +26.36%
+- **Average profit factor:** 1.61
+- **Final window PF:** 1.71
+- **Beats buy-and-hold:** 9/13 windows
+- **All windows positive:** Yes
 
 Config grid was intentionally skipped during WF to avoid curve-fitting. Filter threshold (0.8–2.5%) was selected on full data, then validated out-of-sample.
 
@@ -295,4 +302,4 @@ This software is for educational purposes only. Trading cryptocurrencies involve
 
 ---
 
-**Version:** 2.3
+**Version:** 2.4
