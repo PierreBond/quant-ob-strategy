@@ -281,6 +281,7 @@ class BacktestEngine:
 
         # Initialize strategy
         df = df.copy()
+        self._strategy = strategy
         strategy.on_init(df)
 
         if verbose:
@@ -521,7 +522,7 @@ class BacktestEngine:
         )
 
         self.trades.append(trade)
-        
+
         # === PHASE 1: Update Risk Manager with trade result ===
         if self.risk_manager is not None:
             try:

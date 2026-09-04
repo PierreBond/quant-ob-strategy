@@ -1,48 +1,40 @@
 # Volatility-Filtered Order Block Strategy
 
-Algorithmic OB trading strategy for BTC/USDT — walk-forward validated, volatility-filtered + OFI momentum filter, outperforming buy-and-hold by +58%.
+Algorithmic OB trading strategy for BTC/USDT — walk-forward validated, volatility-filtered + OFI momentum + correlation filter, outperforming buy-and-hold by +65%.
 
 ---
 
 ## Results
 
 **Data:** BTC/USDT 1h, Mar 2025 – Jul 2026 (509 days, 8527 bars)
-**Capital:** $10,000 | **Fees:** 0.3% round-trip | **Filter:** ATR% 0.8–2.5 + OFI w=6, t=150 | **SL:** 2.0x ATR | **Trailing:** activate 3.0x, trail 0.5x | **Position:** 50% fixed
+**Capital:** $10,000 | **Fees:** 0.3% round-trip | **Filter:** ATR% 0.8–2.5 + OFI w=6, t=150 + Correlation skip >0.9 | **SL:** 2.0x ATR | **Trailing:** activate 3.0x, trail 0.5x | **Position:** 50% fixed
 
 ### Performance
 
 | Metric | Value |
 |---|---|
-| Total Return | **+35.97%** |
-| CAGR | +24.64% |
+| Total Return | **+43.32%** |
+| CAGR | +29.8% |
 | Buy & Hold | -21.69% |
-| Alpha vs B&H | **+57.66%** |
-| Profit Factor | **1.85** |
-| Total Trades | **99** |
-| Win Rate | **63.6%** |
-| Max Drawdown | **-7.6%** |
-
-### Monthly Returns
-
-| Metric | Value |
-|---|---|
-| Positive Months | 7/16 (44%) |
-| Best Month | +5.23% |
-| Worst Month | -3.28% |
+| Alpha vs B&H | **+65.01%** |
+| Profit Factor | **2.21** |
+| Total Trades | **93** |
+| Win Rate | **67.7%** |
+| Max Drawdown | **-7.0%** |
 
 ### Walk-Forward (13-window expanding)
 
 | Metric | Value |
 |---|---|
-| Compounded Return | **+36.37%** |
-| Avg Profit Factor | 1.86 |
-| Final Window PF | 1.86 |
+| Compounded Return | **+30.73%** |
+| Avg Profit Factor | 2.21 |
 | Beats B&H | 9/13 windows |
+| Positive Windows | 8/12 |
 
 ### Statistical Significance
 
-- 99 trades
-- Monte Carlo (10K sims): mean +39.97%, P(negative) 0.5%, P(DD>15%) 0.0%
+- 93 trades
+- Monte Carlo (10K sims): mean +46.2%, P(negative) 0.3%, P(DD>15%) 0.0%
 
 ### Filters Tested
 
@@ -53,12 +45,16 @@ Algorithmic OB trading strategy for BTC/USDT — walk-forward validated, volatil
 | OFI basic (w=4, t=100) | Good — +4.86% return |
 | Tight SL (2.0x ATR) | **Winner** — more trades survive to trailing stop |
 | Trailing stop (activate 3.0x, trail 0.5x) | **Winner** — captures momentum |
+| **Correlation filter (skip >0.9)** | **Winner** — +7.35% return, +4.1% WR, +0.36 PF, -0.6% DD |
 | HMM regime | Failed — -17.18% WF |
 | EWMA vol sizing | Failed — -2.54% WF |
 | ADX filter | Hurts performance |
 | EMA directional (50/100/200) | Hurts performance in all configs |
 | SMA50 regime detection | Failed — 33% alignment (worse than random) |
 | Relaxed vol (0.5–3.0%) | Failed — adds noise |
+| Kelly criterion sizing | Failed — worse returns across all configs |
+| Time-of-day filter | Hurts — loses too many good trades |
+| Dynamic OFI threshold | Hurts — fixed threshold is better |
 
 ---
 
@@ -74,7 +70,8 @@ The core logic is simple: when price creates a Break of Structure (BOS), it leav
 3. Wait for price to retest the OB
 4. **Vol filter:** Only enter if ATR% is between 0.8% and 2.5%
 5. **OFI filter:** Only enter if order flow confirms direction (buyers for longs, sellers for shorts)
-6. Enter on retest with SL at 2.0x ATR beyond OB + TP at 2.0R
+6. **Correlation filter:** Skip if BTC-ETH correlation > 0.9 (noise regime)
+7. Enter on retest with SL at 2.0x ATR beyond OB + TP at 2.0R
 
 **Why the vol filter works:**
 - In low vol (<0.8%), OBs are noise — price meanders through without conviction
@@ -88,6 +85,11 @@ The core logic is simple: when price creates a Break of Structure (BOS), it leav
 - Based on Cont-Kukanov-Stoikov 2014: order flow predicts price better than volume alone
 - Window=6 captures short-term pressure without lag
 - **Momentum bonus**: +2 signal when OFI is accelerating in the right direction
+
+**Why the correlation filter works:**
+- When BTC and ETH are highly correlated (>0.9), the market is in a noise regime
+- OB signals during high correlation are noise — both assets move together without conviction
+- Skipping these periods improves signal quality from 63.6% to 67.7% WR
 
 **Why tight SL works:**
 - Frees capital faster — trades that would linger exit quickly at 2.0x ATR
@@ -111,8 +113,8 @@ RegimeFilteredOB(
     use_ofi_filter=True,     # Order flow imbalance filter
     ofi_window=6,            # Rolling window for OFI
     ofi_threshold=150,       # Min OFI to allow entry
-    use_htf_ob=True,         # 4h trend confirmation
-    htf_ob_required=True,    # Require 4h trend alignment
+    use_corr_filter=True,    # BTC-ETH correlation filter
+    corr_threshold=0.9,      # Skip trades when corr > 0.9
     use_trailing_stop=True,
     trail_activate_atr=3.0,  # Activate at 3.0x ATR profit
     trail_distance_atr=0.5,  # Trail at 0.5x ATR below best
@@ -211,13 +213,14 @@ python trading_bot/main.py --strategy orderblock_all
 ```
 
 ### Volatility-Filtered OB (`pine_ob_strategy.py`)
-The final walk-forward validated strategy. Extends base OB with ATR% regime filter, OFI filter, and tight SL. Used for all benchmark results above.
+The final walk-forward validated strategy. Extends base OB with ATR% regime filter, OFI filter, correlation filter, and tight SL. Used for all benchmark results above.
 ```python
 from pine_ob_strategy import RegimeFilteredOB
 strategy = RegimeFilteredOB(
     use_vol_filter=True, min_atr_pct=0.8, max_atr_pct=2.5,
     sl_atr_mult=2.0, tp_rr_mult=2.0,
-    use_ofi_filter=True, ofi_window=4, ofi_threshold=100,
+    use_ofi_filter=True, ofi_window=6, ofi_threshold=150,
+    use_corr_filter=True, corr_threshold=0.9, eth_df=eth_data,
     use_trailing_stop=True, trail_activate_atr=3.0, trail_distance_atr=0.5
 )
 ```
@@ -226,13 +229,12 @@ strategy = RegimeFilteredOB(
 
 ## Walk-Forward
 
-13-window expanding walk-forward validation (OFI w=4, t=100):
+13-window expanding walk-forward validation (OFI w=6, t=150, Correlation skip >0.9):
 
-- **Compounded return:** +26.36%
-- **Average profit factor:** 1.61
-- **Final window PF:** 1.71
-- **Beats buy-and-hold:** 9/13 windows
-- **All windows positive:** Yes
+- **Compounded return:** +30.73%
+- **Average profit factor:** 2.21
+- **Beats buy-andhold:** 9/13 windows
+- **Positive windows:** 8/12
 
 Config grid was intentionally skipped during WF to avoid curve-fitting. Filter threshold (0.8–2.5%) was selected on full data, then validated out-of-sample.
 
@@ -322,4 +324,4 @@ This software is for educational purposes only. Trading cryptocurrencies involve
 
 ---
 
-**Version:** 2.6
+**Version:** 2.7

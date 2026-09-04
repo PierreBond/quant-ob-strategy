@@ -44,7 +44,14 @@ class RegimeFilteredOB(OrderBlockStrategy):
                  ofi_window: int = 10,
                  ofi_threshold: float = 0.0,
                  use_htf_ob: bool = False,
-                 htf_ob_required: bool = True):
+                 htf_ob_required: bool = True,
+                 use_time_filter: bool = False,
+                 allowed_hours: List[int] = None,
+                 use_corr_filter: bool = False,
+                 corr_threshold: float = 0.8,
+                 eth_df: pd.DataFrame = None,
+                 use_dynamic_ofi: bool = False,
+                 ofi_percentile: float = 80):
 
         super().__init__(
             name=name, input_range=input_range,
@@ -71,6 +78,13 @@ class RegimeFilteredOB(OrderBlockStrategy):
         self.htf_ob_required = htf_ob_required
         self.htf_obs: List[HTFOrderBlock] = []
         self.htf_trends: List[HTFTrend] = []
+        self.use_time_filter = use_time_filter
+        self.allowed_hours = allowed_hours or []
+        self.use_corr_filter = use_corr_filter
+        self.corr_threshold = corr_threshold
+        self.eth_df = eth_df
+        self.use_dynamic_ofi = use_dynamic_ofi
+        self.ofi_percentile = ofi_percentile
 
     def _init_state(self):
         super()._init_state()
@@ -123,6 +137,19 @@ class RegimeFilteredOB(OrderBlockStrategy):
             df['ofi_accel'] = df['ofi_momentum'].diff()
             df['ofi_divergence'] = df['ofi'].rolling(20).mean() - df['close'].pct_change(20).rolling(20).mean()
 
+        if self.use_corr_filter and self.eth_df is not None:
+            btc_ret = df['close'].pct_change()
+            eth_ret = self.eth_df['close'].pct_change()
+            common_idx = btc_ret.index.intersection(eth_ret.index)
+            corr = btc_ret.loc[common_idx].rolling(20).corr(eth_ret.loc[common_idx])
+            df['eth_corr'] = corr.reindex(df.index)
+
+        if self.use_dynamic_ofi and self.use_ofi_filter:
+            df['ofi_raw'] = df['ofi'].copy()
+            df['ofi_pct'] = df['ofi'].rolling(100, min_periods=20).apply(
+                lambda x: pd.Series(x).rank(pct=True).iloc[-1] * 100, raw=False
+            )
+
         if self.use_adx_filter:
             high = df['high']; low = df['low']; close = df['close']
             plus_dm = high.diff()
@@ -163,17 +190,34 @@ class RegimeFilteredOB(OrderBlockStrategy):
             atr_pct = current.get('atr_pct', 1.5)
             if pd.isna(atr_pct) or atr_pct < self.min_atr_pct or atr_pct > self.max_atr_pct:
                 return False, 0
+        if self.use_time_filter:
+            hour = current.name.hour if hasattr(current, 'name') else None
+            if hour is not None and hour not in self.allowed_hours:
+                return False, 0
+        if self.use_corr_filter:
+            eth_corr = current.get('eth_corr', 0)
+            if not pd.isna(eth_corr) and eth_corr > self.corr_threshold:
+                return False, 0
         if self.use_ofi_filter:
             ofi = current.get('ofi', 0)
             ofi_mom = current.get('ofi_momentum', 0)
             ofi_accel = current.get('ofi_accel', 0)
             if pd.isna(ofi):
                 return True, 0
-            ofi_signal = 0
-            if ofi > self.ofi_threshold:
-                ofi_signal = 1
-            elif ofi < -self.ofi_threshold:
-                ofi_signal = -1
+            if self.use_dynamic_ofi:
+                ofi_pct = current.get('ofi_pct', 50)
+                if not pd.isna(ofi_pct) and ofi_pct >= self.ofi_percentile:
+                    ofi_signal = 1
+                elif not pd.isna(ofi_pct) and ofi_pct <= (100 - self.ofi_percentile):
+                    ofi_signal = -1
+                else:
+                    ofi_signal = 0
+            else:
+                ofi_signal = 0
+                if ofi > self.ofi_threshold:
+                    ofi_signal = 1
+                elif ofi < -self.ofi_threshold:
+                    ofi_signal = -1
             if ofi_mom > 0 and ofi_signal == 1:
                 ofi_signal = 2
             elif ofi_mom < 0 and ofi_signal == -1:
