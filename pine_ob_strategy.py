@@ -1,7 +1,22 @@
-from typing import Dict
+from typing import Dict, List, Optional, Tuple
 import pandas as pd
 import numpy as np
 from trading_bot.strategies.ob_core import OrderBlockStrategy, OrderBlock, OBState, PositionSide
+
+
+class HTFOrderBlock:
+    """Simple HTF OB for confirmation"""
+    def __init__(self, high: float, low: float, ob_type: str):
+        self.high = high
+        self.low = low
+        self.ob_type = ob_type
+
+
+class HTFTrend:
+    """HTF trend direction for confirmation"""
+    def __init__(self, direction: int, timestamp: pd.Timestamp = None):
+        self.direction = direction  # 1=bullish, -1=bearish, 0=neutral
+        self.timestamp = timestamp
 
 
 class RegimeFilteredOB(OrderBlockStrategy):
@@ -27,7 +42,9 @@ class RegimeFilteredOB(OrderBlockStrategy):
                  trail_distance_atr: float = 1.0,
                  use_ofi_filter: bool = False,
                  ofi_window: int = 10,
-                 ofi_threshold: float = 0.0):
+                 ofi_threshold: float = 0.0,
+                 use_htf_ob: bool = False,
+                 htf_ob_required: bool = True):
 
         super().__init__(
             name=name, input_range=input_range,
@@ -50,10 +67,46 @@ class RegimeFilteredOB(OrderBlockStrategy):
         self.use_ofi_filter = use_ofi_filter
         self.ofi_window = ofi_window
         self.ofi_threshold = ofi_threshold
+        self.use_htf_ob = use_htf_ob
+        self.htf_ob_required = htf_ob_required
+        self.htf_obs: List[HTFOrderBlock] = []
+        self.htf_trends: List[HTFTrend] = []
 
     def _init_state(self):
         super()._init_state()
         self.ob_retest_counts = {}
+
+    def set_htf_obs(self, long_obs: List[HTFOrderBlock], short_obs: List[HTFOrderBlock]):
+        """Set higher timeframe Order Blocks for confirmation"""
+        self.htf_obs = long_obs + short_obs
+
+    def set_htf_trends(self, trends: List[HTFTrend]):
+        """Set higher timeframe trend directions for confirmation"""
+        self.htf_trends = trends
+
+    def _check_htf_ob(self, price: float, direction: str, timestamp: pd.Timestamp = None) -> bool:
+        """Check if price is inside a higher timeframe OB zone or if HTF trend aligns"""
+        if not self.use_htf_ob:
+            return True
+
+        # Check OB zones first
+        for ob in self.htf_obs:
+            if ob.ob_type == direction.lower() and ob.low <= price <= ob.high:
+                return True
+
+        # If no OB match and required, check trend alignment
+        if self.htf_ob_required and self.htf_trends:
+            for trend in reversed(self.htf_trends):
+                if timestamp and trend.timestamp and trend.timestamp <= timestamp:
+                    if direction == 'LONG' and trend.direction == 1:
+                        return True
+                    elif direction == 'SHORT' and trend.direction == -1:
+                        return True
+                    return False
+            # No trend data available for this timestamp - allow trade
+            return True
+
+        return True
 
     def on_init(self, df: pd.DataFrame):
         df = df.copy()
@@ -66,6 +119,9 @@ class RegimeFilteredOB(OrderBlockStrategy):
             df['buy_vol'] = df['volume'] * (df['close'] - df['low']) / hl_range
             df['sell_vol'] = df['volume'] * (df['high'] - df['close']) / hl_range
             df['ofi'] = (df['buy_vol'] - df['sell_vol']).rolling(self.ofi_window).sum()
+            df['ofi_momentum'] = df['ofi'].diff()
+            df['ofi_accel'] = df['ofi_momentum'].diff()
+            df['ofi_divergence'] = df['ofi'].rolling(20).mean() - df['close'].pct_change(20).rolling(20).mean()
 
         if self.use_adx_filter:
             high = df['high']; low = df['low']; close = df['close']
@@ -109,9 +165,20 @@ class RegimeFilteredOB(OrderBlockStrategy):
                 return False, 0
         if self.use_ofi_filter:
             ofi = current.get('ofi', 0)
+            ofi_mom = current.get('ofi_momentum', 0)
+            ofi_accel = current.get('ofi_accel', 0)
             if pd.isna(ofi):
                 return True, 0
-            return True, 1 if ofi > self.ofi_threshold else -1
+            ofi_signal = 0
+            if ofi > self.ofi_threshold:
+                ofi_signal = 1
+            elif ofi < -self.ofi_threshold:
+                ofi_signal = -1
+            if ofi_mom > 0 and ofi_signal == 1:
+                ofi_signal = 2
+            elif ofi_mom < 0 and ofi_signal == -1:
+                ofi_signal = -2
+            return True, ofi_signal
         if self.use_adx_filter:
             adx = current.get('adx', 0)
             if pd.isna(adx) or adx < self.adx_threshold:
@@ -130,6 +197,7 @@ class RegimeFilteredOB(OrderBlockStrategy):
 
         current_idx = len(df) - 1
         atr = current.get('atr', current['close'] * 0.02)
+        price = current['close']
 
         for ob in self.long_obs:
             if not self.use_mitigated_blocks and ob.state == OBState.MITIGATED.value:
@@ -137,6 +205,8 @@ class RegimeFilteredOB(OrderBlockStrategy):
             if current_idx - ob.index > self.max_age_bars:
                 continue
             if trend == -1:
+                continue
+            if not self._check_htf_ob(price, 'LONG'):
                 continue
             if current['low'] <= ob.top and current['high'] > ob.top:
                 if self.ob_retest_counts.get(ob.index, 0) >= 3:
@@ -162,6 +232,8 @@ class RegimeFilteredOB(OrderBlockStrategy):
             if current_idx - ob.index > self.max_age_bars:
                 continue
             if trend == 1:
+                continue
+            if not self._check_htf_ob(price, 'SHORT'):
                 continue
             if current['high'] >= ob.bottom and current['low'] < ob.bottom:
                 if self.ob_retest_counts.get(ob.index, 0) >= 3:

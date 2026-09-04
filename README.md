@@ -1,26 +1,26 @@
 # Volatility-Filtered Order Block Strategy
 
-Algorithmic OB trading strategy for BTC/USDT — walk-forward validated, volatility-filtered + OFI filter, outperforming buy-and-hold by +48%.
+Algorithmic OB trading strategy for BTC/USDT — walk-forward validated, volatility-filtered + OFI momentum filter, outperforming buy-and-hold by +58%.
 
 ---
 
 ## Results
 
 **Data:** BTC/USDT 1h, Mar 2025 – Jul 2026 (509 days, 8527 bars)
-**Capital:** $10,000 | **Fees:** 0.3% round-trip | **Filter:** ATR% 0.8–2.5 + OFI w=4 | **SL:** 2.0x ATR | **Trailing:** activate 3.0x, trail 0.5x | **Position:** 50% fixed
+**Capital:** $10,000 | **Fees:** 0.3% round-trip | **Filter:** ATR% 0.8–2.5 + OFI w=6, t=150 | **SL:** 2.0x ATR | **Trailing:** activate 3.0x, trail 0.5x | **Position:** 50% fixed
 
 ### Performance
 
 | Metric | Value |
 |---|---|
-| Total Return | **+26.00%** |
-| CAGR | +17.89% |
+| Total Return | **+35.97%** |
+| CAGR | +24.64% |
 | Buy & Hold | -21.69% |
-| Alpha vs B&H | **+47.69%** |
-| Profit Factor | **1.71** |
-| Total Trades | **82** |
-| Win Rate | **61.0%** |
-| Max Drawdown | **-9.7%** |
+| Alpha vs B&H | **+57.66%** |
+| Profit Factor | **1.85** |
+| Total Trades | **99** |
+| Win Rate | **63.6%** |
+| Max Drawdown | **-7.6%** |
 
 ### Monthly Returns
 
@@ -34,22 +34,23 @@ Algorithmic OB trading strategy for BTC/USDT — walk-forward validated, volatil
 
 | Metric | Value |
 |---|---|
-| Compounded Return | **+26.36%** |
-| Avg Profit Factor | 1.61 |
-| Final Window PF | 1.71 |
+| Compounded Return | **+36.37%** |
+| Avg Profit Factor | 1.86 |
+| Final Window PF | 1.86 |
 | Beats B&H | 9/13 windows |
 
 ### Statistical Significance
 
-- 82 trades
-- Monte Carlo (10K sims): mean +29.34%, P(negative) 1.9%, P(DD>15%) 0.1%
+- 99 trades
+- Monte Carlo (10K sims): mean +39.97%, P(negative) 0.5%, P(DD>15%) 0.0%
 
 ### Filters Tested
 
 | Filter | Result |
 |---|---|
 | Vol filter (ATR% 0.8–2.5) | **Winner** — filters noise, improves WR |
-| OFI filter (w=4, thresh=100) | **Winner** — +10.44% return, +3.4% WR, +0.34 PF |
+| OFI momentum (w=6, t=150) | **Winner** — +9.97% return, +2.6% WR, +0.14 PF |
+| OFI basic (w=4, t=100) | Good — +4.86% return |
 | Tight SL (2.0x ATR) | **Winner** — more trades survive to trailing stop |
 | Trailing stop (activate 3.0x, trail 0.5x) | **Winner** — captures momentum |
 | HMM regime | Failed — -17.18% WF |
@@ -82,10 +83,11 @@ The core logic is simple: when price creates a Break of Structure (BOS), it leav
 
 **Why the OFI filter works:**
 - Measures net buying/selling pressure using volume delta (tick rule)
-- Skips shorts when buyers are in control (OFI > 100)
-- Skips longs when sellers are in control (OFI < -100)
+- Skips shorts when buyers are in control (OFI > 150)
+- Skips longs when sellers are in control (OFI < -150)
 - Based on Cont-Kukanov-Stoikov 2014: order flow predicts price better than volume alone
-- Window=4 captures short-term pressure without lag
+- Window=6 captures short-term pressure without lag
+- **Momentum bonus**: +2 signal when OFI is accelerating in the right direction
 
 **Why tight SL works:**
 - Frees capital faster — trades that would linger exit quickly at 2.0x ATR
@@ -107,12 +109,30 @@ RegimeFilteredOB(
     min_atr_pct=0.8,         # Min ATR% to enter
     max_atr_pct=2.5,         # Max ATR% to enter
     use_ofi_filter=True,     # Order flow imbalance filter
-    ofi_window=4,            # Rolling window for OFI
-    ofi_threshold=100,       # Min OFI to allow entry
+    ofi_window=6,            # Rolling window for OFI
+    ofi_threshold=150,       # Min OFI to allow entry
+    use_htf_ob=True,         # 4h trend confirmation
+    htf_ob_required=True,    # Require 4h trend alignment
     use_trailing_stop=True,
     trail_activate_atr=3.0,  # Activate at 3.0x ATR profit
     trail_distance_atr=0.5,  # Trail at 0.5x ATR below best
 )
+```
+
+### Multi-Timeframe Confirmation
+
+The strategy supports 4h trend confirmation via `use_htf_ob=True`. When enabled:
+- Only takes LONG entries when 4h EMA50 > EMA200 (bullish trend)
+- Only takes SHORT entries when 4h EMA50 < EMA200 (bearish trend)
+- Falls back to no filter when 4h data is unavailable
+
+```python
+strategy = RegimeFilteredOB(
+    use_htf_ob=True,      # Enable 4h confirmation
+    htf_ob_required=True,  # Require alignment (vs preferred)
+)
+# Pass 4h trend data before backtest
+strategy.set_htf_trends(htf_trends)
 ```
 
 ---
@@ -302,4 +322,4 @@ This software is for educational purposes only. Trading cryptocurrencies involve
 
 ---
 
-**Version:** 2.4
+**Version:** 2.6

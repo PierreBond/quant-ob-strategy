@@ -7,6 +7,7 @@ Features:
 - Require confluence before taking trades
 - Calculate trend alignment score
 - Identify divergences between timeframes
+- Detect Order Blocks on higher timeframes for entry confirmation
 """
 import pandas as pd
 import numpy as np
@@ -26,6 +27,16 @@ class Trend(Enum):
 
 
 @dataclass
+class OrderBlock:
+    """Simple OB for HTF confirmation"""
+    index: int
+    high: float
+    low: float
+    ob_type: str  # 'bullish' or 'bearish'
+    mitigated: bool = False
+
+
+@dataclass
 class TimeframeAnalysis:
     """Analysis results for a single timeframe"""
     timeframe: str
@@ -38,6 +49,14 @@ class TimeframeAnalysis:
     last_close: float
     last_high: float
     last_low: float
+    long_obs: List[OrderBlock] = None
+    short_obs: List[OrderBlock] = None
+
+    def __post_init__(self):
+        if self.long_obs is None:
+            self.long_obs = []
+        if self.short_obs is None:
+            self.short_obs = []
 
 
 class MultiTimeframeAnalyzer:
@@ -228,8 +247,89 @@ class MultiTimeframeAnalyzer:
             atr_pct=last['atr_pct'],
             last_close=last['close'],
             last_high=last['high'],
-            last_low=last['low']
+            last_low=last['low'],
+            long_obs=self._detect_obs(df, 'bullish'),
+            short_obs=self._detect_obs(df, 'bearish')
         )
+
+    def _detect_obs(self, df: pd.DataFrame, ob_type: str, input_range: int = 25) -> List[OrderBlock]:
+        """Detect Order Blocks on a timeframe (simplified BOS logic)"""
+        obs = []
+        if len(df) < input_range + 10:
+            return obs
+
+        structure_low = float('inf')
+        last_up_low = 0.0
+        last_up_high = 0.0
+        last_down_low = 0.0
+        last_down_high = 0.0
+
+        for i in range(input_range, len(df)):
+            lookback = df.iloc[i - input_range:i]
+            structure_low = lookback['low'].min()
+
+            current = df.iloc[i]
+            prev = df.iloc[i - 1]
+
+            if prev['close'] < prev['open']:
+                last_down_high = prev['high']
+                last_down_low = prev['low']
+            else:
+                last_up_high = prev['high']
+                last_up_low = prev['low']
+
+            if ob_type == 'bearish':
+                if prev['close'] >= structure_low and current['close'] < structure_low:
+                    obs.append(OrderBlock(
+                        index=i - 1, high=last_up_high, low=last_up_low,
+                        ob_type='bearish'
+                    ))
+            elif ob_type == 'bullish':
+                if obs and current['close'] > obs[-1].high and not obs[-1].mitigated:
+                    obs[-1].mitigated = True
+                    if last_down_high > 0:
+                        obs.append(OrderBlock(
+                            index=i - 1, high=last_down_high, low=last_down_low,
+                            ob_type='bullish'
+                        ))
+
+        active = [ob for ob in obs if not ob.mitigated]
+        return active[-3:] if len(active) > 3 else active
+
+    def is_price_in_htf_ob(
+        self,
+        price: float,
+        direction: str,
+        entry_timeframe: str = '1h',
+        htf: str = '4h'
+    ) -> Tuple[bool, Optional[OrderBlock]]:
+        """
+        Check if price is inside a higher timeframe Order Block.
+
+        Args:
+            price: Current price to check
+            direction: 'LONG' or 'SHORT'
+            entry_timeframe: The entry timeframe (e.g., '1h')
+            htf: The higher timeframe to check (e.g., '4h')
+
+        Returns:
+            (is_inside: bool, ob: OrderBlock or None)
+        """
+        if htf not in self.analysis:
+            return False, None
+
+        analysis = self.analysis[htf]
+
+        if direction == 'LONG':
+            for ob in analysis.long_obs:
+                if ob.low <= price <= ob.high:
+                    return True, ob
+        elif direction == 'SHORT':
+            for ob in analysis.short_obs:
+                if ob.low <= price <= ob.high:
+                    return True, ob
+
+        return False, None
     
     def get_confirmation(
         self,
