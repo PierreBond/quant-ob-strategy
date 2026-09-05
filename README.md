@@ -58,6 +58,39 @@ Algorithmic OB trading strategy for BTC/USDT — walk-forward validated, volatil
 
 ---
 
+## Multi-Instrument Support
+
+The strategy includes `instrument_configs.py` for auto-detecting instrument and loading optimized parameters.
+
+### Usage
+
+```python
+from instrument_configs import get_config
+from pine_ob_strategy import RegimeFilteredOB
+
+# Auto-detected from symbol
+strategy = RegimeFilteredOB(**get_config('XAUUSD'))   # Gold
+strategy = RegimeFilteredOB(**get_config('QQQ'))       # Nasdaq
+strategy = RegimeFilteredOB(**get_config('SPY'))       # S&P 500
+strategy = RegimeFilteredOB(**get_config('BTCUSDT'))   # BTC
+```
+
+### Instrument Results
+
+| Instrument | Best Return | Verdict |
+|------------|-------------|---------|
+| **BTC** | **+35.97%** | **Edge exists** |
+| Gold (XAU) | -0.80% | No edge |
+| Nasdaq (QQQ) | -1.97% | No edge |
+| S&P 500 (SPY) | -5.46% | No edge |
+| ETH | -6.45% | No edge |
+| Silver | +7.74% | Marginal (underperforms B&H) |
+| Apple | +8.45% | Marginal (underperforms B&H) |
+
+**The strategy is BTC 1h specific.** Other instruments have different ATR% ranges, volume profiles, and market structure that don't support the same edge.
+
+---
+
 ## Strategy
 
 ### How It Works
