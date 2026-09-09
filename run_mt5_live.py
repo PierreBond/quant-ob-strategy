@@ -16,7 +16,7 @@ from trading_bot.config.settings import MT5Config
 from trading_bot.execution.mt5_executor import MT5Executor
 from trading_bot.data.mt5_provider import MT5DataProvider
 from trading_bot.execution.mt5_live_trader import MT5LiveTrader
-from trading_bot.strategies.ob_core import OrderBlockStrategy
+from pine_ob_strategy import RegimeFilteredOB
 
 
 def main():
@@ -66,7 +66,7 @@ def main():
     filters = cfg.get('filters', {})
     risk = cfg.get('risk', {})
 
-    strategy = OrderBlockStrategy(
+    strategy = RegimeFilteredOB(
         input_range=5,
         use_ofi_filter=filters.get('use_ofi_filter', True),
         ofi_window=filters.get('ofi_window', 6),
