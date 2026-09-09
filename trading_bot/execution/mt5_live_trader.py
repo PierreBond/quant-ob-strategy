@@ -266,6 +266,7 @@ class MT5LiveTrader:
         )
 
         last_summary_hour = -1
+        strategy_initialized = False
 
         while True:
             try:
@@ -274,6 +275,11 @@ class MT5LiveTrader:
                     print("No data, waiting...")
                     time.sleep(60)
                     continue
+
+                if not strategy_initialized:
+                    self.strategy.on_init(df)
+                    strategy_initialized = True
+                    print(f"Strategy initialized with {len(df)} bars")
 
                 self._update_position()
 
