@@ -91,6 +91,7 @@ def main():
         'telegram_chat_id': tg_cfg.get('chat_id', ''),
         'send_telegram': tg_cfg.get('enabled', True),
         'check_interval': 900,
+        'order_expiry_hours': 24,
     }
 
     trader = MT5LiveTrader(
